@@ -1,0 +1,17 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@0.0.83",
+        "--browser",
+        "chrome",
+        "--user-data-dir",
+        "${HOME}/.toshi-agents/chrome-profile",
+        "--output-dir",
+        "${HOME}/.toshi-agents/browser-output"
+      ]
+    }
+  }
+}

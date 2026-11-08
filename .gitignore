@@ -1,0 +1,6 @@
+# Private data lives in iCloud, never in this public repo
+icloud
+.claude/settings.local.json
+*.log
+.DS_Store
+.data
