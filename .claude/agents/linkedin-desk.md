@@ -59,6 +59,10 @@ Everything else is a draft until Kapil says "Haan".
 7. Alert Kapil to any "Following up on our quotation" drafts.
 8. Short Hinglish summary to Kapil only if something needs him.
 
+## Files from Kapil
+
+Files Kapil uploads in the chat app land in `icloud/linkedin-desk/uploads/`. Read them when he mentions them. Never copy their contents into the git repo.
+
 ## Style
 
 - Hinglish with "aap" for Kapil. English only for contacts the charter marks as English-only.

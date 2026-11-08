@@ -7,7 +7,7 @@
 <title>Toshi Agents</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Agents Chat App v0.4 rev A (08-11-2026). Same look as the approved mock. */
+/* Toshi Agents Chat App v0.4 rev C (08-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -73,6 +73,10 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .composer textarea{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px 12px;resize:none;height:44px;max-height:140px}
 .send{border:0;background:var(--accent);color:var(--accent-ink);font-weight:700;padding:0 16px;border-radius:10px;cursor:pointer}
 .send:disabled{opacity:.5;cursor:default}
+.clip{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;width:44px;cursor:pointer;font-size:18px}
+.files{display:flex;gap:6px;flex-wrap:wrap;padding:0 16px}
+.file{font:11.5px var(--f-mono);border:1px solid var(--line);background:var(--surface-2);border-radius:8px;padding:4px 8px}
+.chat.drop{outline:2px dashed var(--accent);outline-offset:-6px}
 .panel{border-left:1px solid var(--line);padding:12px;overflow-y:auto;background:var(--surface-2)}
 .row{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;padding:5px 8px}
 .row span:last-child{font-family:var(--f-mono);font-size:11px;text-align:right}
@@ -124,8 +128,11 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
         </div>
       </div>
       <div class="msgs" id="msgs"></div>
+      <div class="files" id="files"></div>
       <div class="chips" id="chips"></div>
       <form class="composer" id="form">
+        <button class="clip" id="clip" type="button" title="Attach files (or drag them here)" aria-label="Attach files">📎</button>
+        <input type="file" id="fileIn" multiple hidden>
         <textarea id="inp" placeholder="Message…" aria-label="Message"></textarea>
         <button class="send" id="sendBtn" type="submit">Send</button>
       </form>
@@ -232,9 +239,14 @@ async function loadChat() {
   scroll();
 }
 function label(t) { const m = String(t).match(/^mcp__(.+?)__(.+)$/); return m ? m[1].replace(/^claude_ai_/, '').replace(/_/g, ' ') + ': ' + m[2].replace(/_/g, ' ') : t; }
+function md(text) {
+  const esc = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return esc.replace(/^#{1,4}\s+(.*)$/gm, '<b>$1</b>').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`\n]+)`/g, '<code>$1</code>');
+}
+function bubble(who, text) { const d = el('div', 'm ' + who); d.innerHTML = md(text); return d; }
 function addMsg(who, text, at) {
   const empty = $('msgs').querySelector('.empty'); if (empty) empty.remove();
-  const d = el('div', 'm ' + who, text); if (at) d.append(el('span', 'at', at)); $('msgs').append(d); scroll(); return d;
+  const d = bubble(who, text); if (at) d.append(el('span', 'at', at)); $('msgs').append(d); scroll(); return d;
 }
 function addApproval(items) {
   const box = el('div', 'ask'); box.append(el('b', null, 'Needs your OK'));
@@ -262,7 +274,7 @@ async function send(text, opts = {}) {
       while ((i = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, i); buf = buf.slice(i + 1); if (!line.trim()) continue;
         const ev = JSON.parse(line);
-        if (ev.t === 'text') { $('msgs').insertBefore(el('div', 'm bot', ev.v), work); }
+        if (ev.t === 'text') { $('msgs').insertBefore(bubble('bot', ev.v), work); }
         if (ev.t === 'tool') work.textContent = 'Using ' + ev.v + '…';
         if (ev.t === 'approve') { work.remove(); addApproval(ev.v); }
         if (ev.t === 'error') { $('msgs').insertBefore(el('div', 'err', ev.v), work); }
@@ -275,7 +287,30 @@ async function send(text, opts = {}) {
 }
 async function loadChatMeta() { const d = await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json(); $('allowList').textContent = d.allow.length ? d.allow.map(label).join(', ') : 'None yet'; }
 
-$('form').onsubmit = e => { e.preventDefault(); const v = $('inp').value; $('inp').value = ''; send(v); };
+let attached = [];
+function showFiles() { const f = $('files'); f.replaceChildren(); for (const a of attached) f.append(el('span', 'file', '📄 ' + a.name)); }
+async function upload(files) {
+  for (const file of files) {
+    const tag = el('span', 'file', '⏳ ' + file.name); $('files').append(tag);
+    try {
+      const r = await fetch('/api/upload?agent=' + encodeURIComponent(cur) + '&name=' + encodeURIComponent(file.name), { method: 'POST', body: file });
+      const d = await r.json(); if (!r.ok) throw new Error(d.error);
+      attached.push(d);
+    } catch (e) { $('msgs').append(el('div', 'err', file.name + ': ' + e.message)); }
+  }
+  showFiles(); $('inp').focus();
+}
+$('clip').onclick = () => $('fileIn').click();
+$('fileIn').onchange = () => { upload([...$('fileIn').files]); $('fileIn').value = ''; };
+const chatEl = document.querySelector('.chat');
+chatEl.addEventListener('dragover', e => { e.preventDefault(); chatEl.classList.add('drop'); });
+chatEl.addEventListener('dragleave', e => { if (e.target === chatEl) chatEl.classList.remove('drop'); });
+chatEl.addEventListener('drop', e => { e.preventDefault(); chatEl.classList.remove('drop'); if (e.dataTransfer.files.length) upload([...e.dataTransfer.files]); });
+$('form').onsubmit = e => {
+  e.preventDefault(); let v = $('inp').value.trim();
+  if (attached.length) { v = (v || 'Maine ye files upload ki hain. Padh kar short summary dijiye.') + '\n\nUploaded files:\n' + attached.map(a => '- ' + a.path).join('\n'); attached = []; showFiles(); }
+  $('inp').value = ''; send(v);
+};
 $('inp').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('form').requestSubmit(); } };
 function setTone(t) { tone = t; $('fun').classList.toggle('on', t === 'fun'); $('pro').classList.toggle('on', t === 'pro'); try { localStorage.setItem('tone', t); } catch {} }
 $('fun').onclick = () => setTone('fun'); $('pro').onclick = () => setTone('pro'); setTone(tone);

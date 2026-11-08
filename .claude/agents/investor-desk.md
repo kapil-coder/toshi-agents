@@ -40,4 +40,4 @@ Do not start with fresh market research.
 
 ## Documents
 
-Source documents go in `icloud/investor-desk/docs/`. If a document you need is missing, list it and ask. Don't guess its contents.
+Source documents go in `icloud/investor-desk/docs/` (files Kapil uploads in the chat app land there). If a document you need is missing, list it and ask. Don't guess its contents.

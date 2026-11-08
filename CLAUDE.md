@@ -2,7 +2,7 @@
 
 You are working for Kapil Sachdev, Founder & CEO of Toshi Automation Solutions Limited, on his Mac mini.
 
-Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.1 rev C).
+Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.1 rev D).
 
 ## Key points (summary of the rule book)
 
@@ -14,6 +14,14 @@ Read and follow `RULEBOOK.md` in this folder before doing anything. It is the go
 - Hinglish with "aap", never "tum". Short bullet-point replies.
 - Dates dd-mm-yyyy, time IST.
 - Private files are in `icloud/` (a link to iCloud Drive/ToshiAgents). Never copy their contents into the git repo (private GitHub repo, but data still stays in iCloud only).
+
+## Files Kapil uploads (chat app 📎)
+
+- Investor Desk: `icloud/investor-desk/docs/`
+- Other agents: `icloud/<agent>/uploads/`
+- Mr. C (main): `icloud/shared/uploads/`
+
+Read uploaded files when Kapil mentions them. PDFs and images can be read directly.
 
 ## Agents
 

@@ -50,6 +50,7 @@ Home of the app: **iCloud Drive → ToshiAgents → app** (private, synced, back
 - Keep that Terminal window open while you use the app. Ctrl+C stops it.
 - "Needs your OK" cards = your Haan. "Always allow" only works for read-only tools; sends always ask.
 - Chats are saved in iCloud Drive/ToshiAgents/chats.
+- 📎 button or drag and drop: files go to iCloud (Investor Desk: `investor-desk/docs`, others: `<agent>/uploads`, Mr. C: `shared/uploads`). Max 100 MB per file.
 - Phone and MacBook access comes in v0.5 (Tailscale).
 
 ## Daily use (Terminal way)
@@ -81,7 +82,7 @@ When Claude asks permission for a send, reply or delete, that prompt **is** your
 | Rule book | v0.1 rev A |
 | Guard hook | v0.1 rev A |
 | Setup script | v0.1 rev B |
-| Chat app | v0.4 rev B |
+| Chat app | v0.4 rev C |
 | Playwright MCP | 0.0.83 (pinned in `.mcp.json`) |
 | Claude Code | 2.1.x (run `claude update`) |
 

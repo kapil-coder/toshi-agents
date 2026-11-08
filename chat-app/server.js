@@ -8,7 +8,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.4 rev B';
+const VERSION = 'v0.4 rev C';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -138,6 +138,7 @@ Created ${stamp()} IST from the Toshi Agents app${f.source ? ' (imported from Gr
 ## Before anything else
 1. Read \`RULEBOOK.md\` (golden rule book). It always wins.
 2. If \`icloud/${id}/charter.md\` exists, read it.
+3. Files Kapil uploads in the chat app land in \`icloud/${id}/uploads/\`.
 
 ## Company
 ${f.company || 'Toshi Automation'}
@@ -240,6 +241,22 @@ const server = http.createServer(async (req, res) => {
       fs.mkdirSync(AGENTS_DIR, { recursive: true }); fs.writeFileSync(file, text);
       if (fs.existsSync(ICLOUD)) fs.mkdirSync(path.join(ICLOUD, id), { recursive: true });
       return json(res, 200, { ok: true, id });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/upload') {
+      const id = url.searchParams.get('agent') || '';
+      if (!validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
+      if (!fs.existsSync(ICLOUD)) return json(res, 400, { error: 'iCloud link missing. Run scripts/setup-mac.sh first.' });
+      const rel = id === 'investor-desk' ? 'investor-desk/docs' : id === 'mr-c' ? 'shared/uploads' : id + '/uploads';
+      const dir = path.join(ICLOUD, rel); fs.mkdirSync(dir, { recursive: true });
+      let name = path.basename(String(url.searchParams.get('name') || 'file')).replace(/[^\w.\- ()]/g, '_').slice(0, 120) || 'file';
+      const ext = path.extname(name), base = name.slice(0, name.length - ext.length);
+      for (let n = 2; fs.existsSync(path.join(dir, name)); n++) name = base + ' (' + n + ')' + ext;
+      const out = fs.createWriteStream(path.join(dir, name)); let size = 0, tooBig = false;
+      req.on('data', c => { size += c.length; if (size > 100e6 && !tooBig) { tooBig = true; out.destroy(); fs.rm(path.join(dir, name), () => {}); json(res, 413, { error: 'File is over 100 MB.' }); req.destroy(); } });
+      req.pipe(out);
+      out.on('finish', () => { if (!tooBig) json(res, 200, { ok: true, path: 'icloud/' + rel + '/' + name, name, size }); });
+      out.on('error', e => { if (!tooBig) json(res, 500, { error: e.message }); });
+      return;
     }
     json(res, 404, { error: 'Not found' });
   } catch (e) { json(res, 500, { error: e.message }); }
