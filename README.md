@@ -82,7 +82,7 @@ When Claude asks permission for a send, reply or delete, that prompt **is** your
 | Rule book | v0.1 rev A |
 | Guard hook | v0.1 rev A |
 | Setup script | v0.1 rev B |
-| Chat app | v0.4 rev C |
+| Chat app | v0.4 rev D |
 | Playwright MCP | 0.0.83 (pinned in `.mcp.json`) |
 | Claude Code | 2.1.x (run `claude update`) |
 

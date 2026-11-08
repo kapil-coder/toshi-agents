@@ -7,7 +7,7 @@
 <title>Toshi Agents</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Agents Chat App v0.4 rev C (08-11-2026). Same look as the approved mock. */
+/* Toshi Agents Chat App v0.4 rev D (08-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -194,7 +194,10 @@ const CHIPS = {
   'linkedin-desk': ['/linkedin-evening', '/prospecting-morning', 'Open leads ka status do'],
   'investor-desk': ['/investor-resume', 'Diligence issues ki list do'],
 };
-let agents = [], cur = 'mr-c', tone = 'pro', busy = false;
+let agents = [], cur = 'mr-c', tone = 'pro';
+const busyAgents = new Set(); // agents working right now (several can run in parallel)
+const isBusy = () => busyAgents.has(cur);
+function syncSend() { $('sendBtn').disabled = isBusy(); $('sendBtn').textContent = isBusy() ? '…' : 'Send'; }
 try { tone = localStorage.getItem('tone') || 'pro'; cur = localStorage.getItem('agent') || 'mr-c'; } catch {}
 
 const colorOf = id => COLORS[[...id].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
@@ -209,8 +212,8 @@ async function loadAgents() {
     const b = el('button', 'agent' + (a.id === cur ? ' on' : ''));
     const av = el('span', 'av', a.name[0].toUpperCase()); av.style.background = colorOf(a.id);
     const t = el('span'); t.append(el('b', null, a.name), el('small', null, a.description));
-    b.append(av, t, a.paused ? el('span', 'pill warn', 'Paused') : el('span', 'live' + (a.busy ? ' busy' : '')));
-    b.onclick = () => { if (busy) return; cur = a.id; try { localStorage.setItem('agent', cur); } catch {} loadAgents(); };
+    b.append(av, t, a.paused && !busyAgents.has(a.id) ? el('span', 'pill warn', 'Paused') : el('span', 'live' + (busyAgents.has(a.id) || a.busy ? ' busy' : '')));
+    b.onclick = () => { if (cur === a.id) return; cur = a.id; attached = []; showFiles(); try { localStorage.setItem('agent', cur); } catch {} loadAgents(); };
     side.append(b);
   }
   const add = el('button', 'agent'); add.style.color = 'var(--accent)';
@@ -236,7 +239,8 @@ async function loadChat() {
   for (const x of d.messages) addMsg(x.who, x.text, x.at);
   if (d.pending && d.pending.length) addApproval(d.pending);
   $('allowList').textContent = d.allow.length ? d.allow.map(label).join(', ') : 'None yet';
-  scroll();
+  if (isBusy()) m.append(el('div', 'tool', 'Still working… the reply appears here when done. You can use other agents meanwhile.'));
+  syncSend(); scroll();
 }
 function label(t) { const m = String(t).match(/^mcp__(.+?)__(.+)$/); return m ? m[1].replace(/^claude_ai_/, '').replace(/_/g, ' ') + ': ' + m[2].replace(/_/g, ' ') : t; }
 function md(text) {
@@ -259,8 +263,9 @@ function addApproval(items) {
   btns.append(yes, always, no); box.append(btns); $('msgs').append(box); scroll();
 }
 async function send(text, opts = {}) {
-  if (busy || !text.trim()) return;
-  busy = true; $('sendBtn').disabled = true; $('sendBtn').textContent = '…';
+  if (isBusy() || !text.trim()) return;
+  const agent = cur; busyAgents.add(agent); syncSend(); markSide();
+  const here = () => cur === agent;
   addMsg('me', text);
   const work = el('div', 'tool', 'Working…'); $('msgs').append(work); scroll();
   try {
@@ -274,6 +279,7 @@ async function send(text, opts = {}) {
       while ((i = buf.indexOf('\n')) >= 0) {
         const line = buf.slice(0, i); buf = buf.slice(i + 1); if (!line.trim()) continue;
         const ev = JSON.parse(line);
+        if (!here() || !work.isConnected) continue; // user switched agent; server still saves the reply
         if (ev.t === 'text') { $('msgs').insertBefore(bubble('bot', ev.v), work); }
         if (ev.t === 'tool') work.textContent = 'Using ' + ev.v + '…';
         if (ev.t === 'approve') { work.remove(); addApproval(ev.v); }
@@ -281,9 +287,21 @@ async function send(text, opts = {}) {
         scroll();
       }
     }
-  } catch (e) { $('msgs').append(el('div', 'err', e.message)); }
-  work.remove(); busy = false; $('sendBtn').disabled = false; $('sendBtn').textContent = 'Send'; scroll();
-  loadChatMeta();
+  } catch (e) { if (here()) $('msgs').append(el('div', 'err', e.message)); }
+  busyAgents.delete(agent); work.remove(); markSide();
+  if (here()) { syncSend(); loadChat(); }
+}
+function markSide() { loadAgentsQuiet(); }
+async function loadAgentsQuiet() {
+  // refresh sidebar dots without reloading the open chat
+  const list = await (await fetch('/api/agents')).json();
+  document.querySelectorAll('#side .agent').forEach((b, i) => {
+    const a = list[i]; if (!a) return; const dot = b.lastChild;
+    const working = busyAgents.has(a.id) || a.busy;
+    if (working) { const n = el('span', 'live busy'); b.replaceChild(n, dot); }
+    else if (a.paused) { b.replaceChild(el('span', 'pill warn', 'Paused'), dot); }
+    else { b.replaceChild(el('span', 'live'), dot); }
+  });
 }
 async function loadChatMeta() { const d = await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json(); $('allowList').textContent = d.allow.length ? d.allow.map(label).join(', ') : 'None yet'; }
 
@@ -316,7 +334,7 @@ function setTone(t) { tone = t; $('fun').classList.toggle('on', t === 'fun'); $(
 $('fun').onclick = () => setTone('fun'); $('pro').onclick = () => setTone('pro'); setTone(tone);
 let clearArmed = false;
 $('clear').onclick = async () => {
-  if (busy) return;
+  if (isBusy()) return;
   if (!clearArmed) { clearArmed = true; $('clear').textContent = 'Sure? Tap again'; setTimeout(() => { clearArmed = false; $('clear').textContent = 'New chat'; }, 3000); return; }
   clearArmed = false; $('clear').textContent = 'New chat';
   await fetch('/api/clear', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: cur }) }); loadChat();

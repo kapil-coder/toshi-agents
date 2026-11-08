@@ -15,7 +15,7 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Playwright MCP (browser tool) | 0.0.83 (pinned) |
 | Rule book | v0.1 rev D |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
-| Chat app | v0.4 rev C |
+| Chat app | v0.4 rev D |
 
 ## 2. Rules for every agent
 
