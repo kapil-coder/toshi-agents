@@ -15,7 +15,7 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Playwright MCP (browser tool) | 0.0.83 (pinned) |
 | Rule book | v0.1 rev C |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
-| Chat app | v0.4 rev A |
+| Chat app | v0.4 rev B |
 
 ## 2. Rules for every agent
 
@@ -82,5 +82,5 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
-| v0.1 rev C | 08-11-2026 | Chat app v0.4 rev A added (localhost:3000), same look as the approved mock. |
+| v0.1 rev C | 08-11-2026 | Chat app v0.4 rev A added (localhost:3737), same look as the approved mock. |
 | v0.1 rev B | 08-11-2026 | App home moved to iCloud Drive/ToshiAgents/app with local git version history (Option A). |

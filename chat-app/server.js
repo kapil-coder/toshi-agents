@@ -1,6 +1,6 @@
 // Toshi Agents Chat App v0.4 rev A (08-11-2026)
 // Local web app on the Mac mini: chat with Claude Code agents, approve actions, add agents.
-// No npm packages needed. Run:  node chat-app/server.js   then open http://localhost:3000
+// No npm packages needed. Run:  node chat-app/server.js   then open http://localhost:3737
 'use strict';
 const http = require('http');
 const fs = require('fs');
@@ -8,8 +8,8 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.4 rev A';
-const PORT = Number(process.env.PORT || 3000);
+const VERSION = 'v0.4 rev B';
+const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
 const AGENTS_DIR = path.join(PROJECT, '.claude', 'agents');

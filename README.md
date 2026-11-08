@@ -46,7 +46,7 @@ Home of the app: **iCloud Drive → ToshiAgents → app** (private, synced, back
 ```
 ~/toshi-agents/scripts/start-app.sh
 ```
-- Opens **http://localhost:3000** in your browser: agents sidebar, chat window, live panel, Add Agent screen.
+- Opens **http://localhost:3737** in your browser: agents sidebar, chat window, live panel, Add Agent screen.
 - Keep that Terminal window open while you use the app. Ctrl+C stops it.
 - "Needs your OK" cards = your Haan. "Always allow" only works for read-only tools; sends always ask.
 - Chats are saved in iCloud Drive/ToshiAgents/chats.
@@ -81,7 +81,7 @@ When Claude asks permission for a send, reply or delete, that prompt **is** your
 | Rule book | v0.1 rev A |
 | Guard hook | v0.1 rev A |
 | Setup script | v0.1 rev B |
-| Chat app | v0.4 rev A |
+| Chat app | v0.4 rev B |
 | Playwright MCP | 0.0.83 (pinned in `.mcp.json`) |
 | Claude Code | 2.1.x (run `claude update`) |
 
