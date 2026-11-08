@@ -31,7 +31,7 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 10. **Browser:** use the agent's own Chrome profile. One tab, reused. Close extra tabs.
 11. **Lean:** no polling, no repeated checks, no research sweeps unless Kapil asks.
 12. **WhatsApp to leads or third parties:** the agent drafts the text, and Kapil sends it from his own regular WhatsApp. Never from WhatsApp Business.
-13. **Confidential data never goes into the GitHub repo.** This repo is public. Charters, leads, figures and contacts live only in iCloud.
+13. **Confidential data never goes into GitHub.** Even though kapil-coder/toshi-agents is private, charters, leads, figures and contacts live only in iCloud.
 
 ## 3. Standing approvals (agents may do these without asking each time)
 

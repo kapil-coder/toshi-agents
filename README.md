@@ -9,7 +9,7 @@ Claude Code agents migrated from Grok. Rules are in [RULEBOOK.md](RULEBOOK.md).
 | Investor Desk v0.1 | `.claude/agents/investor-desk.md` | Paused until you run `/investor-resume` |
 | LinkedIn Desk v0.1 | `.claude/agents/linkedin-desk.md` | Manual runs |
 
-**This repo is public.** Charters, leads, figures and contacts stay in iCloud Drive only (`icloud/` is a local link and is never committed).
+**Private repo: kapil-coder/toshi-agents.** Charters, leads, figures and contacts stay in iCloud Drive only (`icloud/` is a local link and is never committed).
 
 ## One-time setup on the Mac mini (baby steps, about 20 minutes)
 
