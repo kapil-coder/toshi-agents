@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.9 rev A';
+const VERSION = 'v0.9 rev B';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -100,7 +100,7 @@ function runClaude(agent, message, opts, onEvent) {
   // Tools Kapil approved with Haan for this run: the guard hook allows exactly these
   // Own browser per agent (LinkedIn Desk and Mr. C keep the shared profile with the LinkedIn login)
   const env = { ...process.env, TOSHI_ALLOW: allow.join(' '), TOSHI_AGENT: agent, TOSHI_HOP: String(opts.hop || 0),
-    TOSHI_PORT: String(PORT), TOSHI_STRICT_SEND: STRICT_SEND_RE.test(agent + ' ' + agentName(agent)) ? '1' : '' };
+    TOSHI_PORT: String(PORT), TOSHI_SHOW_BROWSER: getSettings().showBrowser ? '1' : '', TOSHI_STRICT_SEND: STRICT_SEND_RE.test(agent + ' ' + agentName(agent)) ? '1' : '' };
   if (!SHARED_BROWSER.has(agent)) {
     env.TOSHI_BROWSER_PROFILE = path.join(os.homedir(), '.toshi-agents', 'chrome-profiles', agent);
     env.TOSHI_BROWSER_OUTPUT = path.join(os.homedir(), '.toshi-agents', 'browser-output', agent);
@@ -318,6 +318,43 @@ function captureScreen(cb) {
   });
 }
 
+
+// ---------- per-agent browser view via Chrome DevTools (v0.9) ----------
+function agentProfile(agent) {
+  return SHARED_BROWSER.has(agent) ? path.join(os.homedir(), '.toshi-agents', 'chrome-profile')
+    : path.join(os.homedir(), '.toshi-agents', 'chrome-profiles', agent);
+}
+function agentBrowserPort(agent) {
+  try { return Number(fs.readFileSync(path.join(agentProfile(agent), '.toshi-port'), 'utf8')) || 0; } catch { return 0; }
+}
+const shotCache = new Map(); // agent -> { at, buf, err }
+function captureAgentBrowser(agent, cb) {
+  const c = shotCache.get(agent); if (c && Date.now() - c.at < 1200) return cb(c);
+  const port = agentBrowserPort(agent);
+  const done = r => { r.at = Date.now(); shotCache.set(agent, r); cb(r); };
+  if (!port) return done({ buf: null, err: 'This bot has not opened its browser yet. It appears here when the bot uses the browser.' });
+  if (typeof WebSocket === 'undefined') return done({ buf: null, err: 'Node.js 22+ needed for live browser view.' });
+  http.get({ host: '127.0.0.1', port, path: '/json/list', timeout: 2000 }, r => {
+    let d = ''; r.on('data', x => d += x);
+    r.on('end', () => {
+      let pages = []; try { pages = JSON.parse(d).filter(t => t.type === 'page' && t.webSocketDebuggerUrl); } catch {}
+      const pg = pages.find(t => !/^about:blank|^chrome:/.test(t.url)) || pages[0];
+      if (!pg) return done({ buf: null, err: "The bot's browser is idle (no page open)." });
+      let ws; const timer = setTimeout(() => { try { ws.close(); } catch {} done({ buf: null, err: 'Browser did not answer.' }); }, 5000);
+      try { ws = new WebSocket(pg.webSocketDebuggerUrl); } catch (e) { clearTimeout(timer); return done({ buf: null, err: e.message }); }
+      ws.onopen = () => ws.send(JSON.stringify({ id: 1, method: 'Page.captureScreenshot', params: { format: 'jpeg', quality: 60 } }));
+      ws.onmessage = m => {
+        let j; try { j = JSON.parse(m.data); } catch { return; }
+        if (j.id !== 1) return; clearTimeout(timer); try { ws.close(); } catch {}
+        if (j.result && j.result.data) done({ buf: Buffer.from(j.result.data, 'base64'), err: '', title: pg.title, url: pg.url });
+        else done({ buf: null, err: 'Could not capture the bot browser.' });
+      };
+      ws.onerror = () => { clearTimeout(timer); done({ buf: null, err: "The bot's browser is not running. It starts when the bot uses the browser." }); };
+    });
+  }).on('error', () => done({ buf: null, err: "The bot's browser is not running. It starts when the bot uses the browser." }))
+    .on('timeout', function () { this.destroy(); });
+}
+
 // ---------- server ----------
 const PUBLIC = path.join(__dirname, 'public');
 const server = http.createServer(async (req, res) => {
@@ -426,6 +463,13 @@ const server = http.createServer(async (req, res) => {
       return;
     }
     if (req.method === 'GET' && url.pathname === '/api/screen') {
+      const ag = url.searchParams.get('agent');
+      if (ag && validAgent(ag) && url.searchParams.get('mode') !== 'mac') {
+        return captureAgentBrowser(ag, c => {
+          if (!c.buf) return json(res, 503, { error: c.err });
+          res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store', 'X-Page-Title': encodeURIComponent(c.title || '') }); res.end(c.buf);
+        });
+      }
       return captureScreen(c => {
         if (!c.buf) return json(res, 503, { error: c.err || 'No screen' });
         res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store', 'X-Screen-Note': c.err ? 'warn' : 'ok' }); res.end(c.buf);
@@ -499,6 +543,7 @@ const server = http.createServer(async (req, res) => {
           if (b.ntfyTopic !== undefined) { if (b.ntfyTopic && !/^[A-Za-z0-9_-]{8,64}$/.test(b.ntfyTopic)) return json(res, 400, { error: 'Topic: 8-64 letters, numbers, - or _' }); s.ntfyTopic = b.ntfyTopic; }
           writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
         }
+        if (b.action === 'showBrowser') { s.showBrowser = !!b.on; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'test') { notify('Toshi Bot test', 'Notifications are working. ' + stamp() + ' IST'); return json(res, 200, { ok: true }); }
         if (b.action === 'addFolder') { const r = folderOk(b.path); if (r.error) return json(res, 400, r); setFolders([...new Set([...getFolders(), r.full])]); return json(res, 200, { ok: true }); }
         if (b.action === 'removeFolder') {

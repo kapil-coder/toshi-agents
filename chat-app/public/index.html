@@ -8,7 +8,7 @@
 <title>Toshi Bot</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v0.9 rev A (09-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v0.9 rev B (09-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -148,7 +148,7 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
         </div>
       </div>
       <div class="screen" id="livePanel" hidden>
-        <div class="bar"><span class="dotlive"></span><span id="liveNote">LIVE · Mac mini screen</span><button id="liveClose" type="button">Close</button></div>
+        <div class="bar"><span class="dotlive"></span><span id="liveNote">LIVE · bot's computer</span><button id="liveMode" type="button">Mac screen</button><button id="liveClose" type="button" style="margin-left:6px">Close</button></div>
         <img id="liveImg" alt="Live view of the Mac mini screen">
         <div class="err" id="liveErr" hidden></div>
       </div>
@@ -243,6 +243,8 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
       <h4 style="margin:0">App update</h4>
       <div class="btns"><button class="btn pri" id="upd" type="button">⬆️ Update app</button><span class="msg" id="updMsg"></span></div>
       <div class="note">Gets the latest version from GitHub and restarts. Takes about 10 seconds.</div>
+      <h4 style="margin:10px 0 0">Bot computers</h4>
+      <div class="opts"><label><input type="checkbox" id="showBrowser"> Show bot browser windows on the Mac screen (normally hidden; watch them in 🔴 Live)</label></div>
       <h4 style="margin:10px 0 0">Phone notifications (free ntfy app)</h4>
       <div class="note">1. Install <b>ntfy</b> on iPhone (App Store). 2. Tap + and subscribe to the topic below. 3. Turn on and press Test. Only a short line like "LinkedIn Desk finished" is sent, never your data.</div>
       <div class="f2">
@@ -479,17 +481,19 @@ async function poll() {
 setInterval(poll, 4000);
 
 // ---------- Live screen (view only) ----------
-let liveTimer = null, liveAuto = true;
+let liveTimer = null, liveAuto = true, liveMac = false;
 try { liveAuto = localStorage.getItem('liveAuto') !== '0'; } catch {}
 function liveFrame() {
   const img = new Image();
-  img.onload = () => { $('liveImg').src = img.src; $('liveImg').hidden = false; $('liveErr').hidden = true; $('liveNote').textContent = 'LIVE · Mac mini screen · ' + new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' }); };
+  img.onload = () => { $('liveImg').src = img.src; $('liveImg').hidden = false; $('liveErr').hidden = true; $('liveNote').textContent = 'LIVE · ' + (liveMac ? 'Mac mini screen' : "bot's computer") + ' · ' + new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata' }); };
   img.onerror = async () => {
-    try { const r = await fetch('/api/screen'); const d = await r.json(); $('liveErr').textContent = d.error || 'Live view not available.'; } catch { $('liveErr').textContent = 'Live view not available.'; }
+    try { const r = await fetch(liveUrl()); const d = await r.json(); $('liveErr').textContent = d.error || 'Live view not available.'; } catch { $('liveErr').textContent = 'Live view not available.'; }
     $('liveErr').hidden = false; $('liveImg').hidden = true;
   };
-  img.src = '/api/screen?t=' + Date.now();
+  img.src = liveUrl() + '&t=' + Date.now();
 }
+function liveUrl() { return '/api/screen?agent=' + encodeURIComponent(cur) + (liveMac ? '&mode=mac' : ''); }
+$('liveMode').onclick = () => { liveMac = !liveMac; $('liveMode').textContent = liveMac ? "Bot's computer" : 'Mac screen'; liveFrame(); };
 function openLive() { $('livePanel').hidden = false; liveFrame(); clearInterval(liveTimer); liveTimer = setInterval(() => { if (!document.hidden && !$('livePanel').hidden) liveFrame(); }, 2000); }
 function closeLive() { $('livePanel').hidden = true; clearInterval(liveTimer); liveTimer = null; }
 $('liveBtn').onclick = () => { if ($('livePanel').hidden) { openLive(); liveAuto = true; } else { closeLive(); liveAuto = false; } try { localStorage.setItem('liveAuto', liveAuto ? '1' : '0'); } catch {} };
@@ -562,6 +566,7 @@ $('sSave').onclick = async () => {
 };
 async function loadSettings() {
   const s = await (await fetch('/api/settings')).json();
+  $('showBrowser').checked = !!s.showBrowser;
   $('nTopic').value = s.ntfyTopic || ('toshi-' + Math.random().toString(36).slice(2, 12)); $('nOn').checked = !!s.notify;
   const al = $('agentList'); al.replaceChildren();
   for (const a of agents) {
@@ -595,6 +600,7 @@ async function loadSettings() {
     it.append(top); fl.append(it);
   }
 }
+$('showBrowser').onchange = () => post('/api/settings', { action: 'showBrowser', on: $('showBrowser').checked }).catch(() => {});
 $('nSave').onclick = () => post('/api/settings', { action: 'notify', notify: $('nOn').checked, ntfyTopic: $('nTopic').value.trim() }).then(() => { $('nMsg').textContent = 'Saved ✓'; }).catch(e => { $('nMsg').textContent = e.message; });
 $('nTest').onclick = () => post('/api/settings', { action: 'notify', notify: true, ntfyTopic: $('nTopic').value.trim() }).then(() => { $('nOn').checked = true; return post('/api/settings', { action: 'test' }); }).then(() => { $('nMsg').textContent = 'Test sent. Check your iPhone.'; }).catch(e => { $('nMsg').textContent = e.message; });
 $('fAdd').onclick = () => post('/api/settings', { action: 'addFolder', path: $('fPath').value.trim() }).then(() => { $('fPath').value = ''; $('fMsg').textContent = 'Added ✓'; loadSettings(); }).catch(e => { $('fMsg').textContent = e.message; });

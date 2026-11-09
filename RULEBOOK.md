@@ -1,6 +1,6 @@
 # Toshi Bot: Golden Rule Book
 
-Version: v0.3 rev C | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
+Version: v0.3 rev D | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
 
 This rule book applies to every Toshi Bot agent run with Claude Code on the Mac mini. (Product renamed from "Toshi Agents" to "Toshi Bot" on 09-11-2026; folder and repo names stay toshi-agents.)
 Each agent's own charter (kept privately in iCloud) adds detail. If they disagree, the stricter rule wins.
@@ -12,13 +12,13 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Mac mini | Apple M4, 16 GB, macOS Tahoe 26.5.1 |
 | Claude Code | 2.1.x (keep updated with `claude update`) |
 | Node.js | Current LTS (needed for the browser tool) |
-| Playwright MCP (browser tool) | 0.0.83 (pinned, via scripts/browser-mcp.sh) |
-| Rule book | v0.3 rev C |
+| Playwright MCP (browser tool) | 0.0.83 (pinned), connects to each bot's hidden Chrome via scripts/browser-mcp.sh v0.9 rev B |
+| Rule book | v0.3 rev D |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
 | Guard hook | v0.3 rev A |
-| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update) | v0.9 rev A |
+| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update) | v0.9 rev B |
 
 ## 2. Rules for every agent
 
@@ -101,6 +101,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v0.3 rev D | 09-11-2026 | v0.9 rev B: each bot works silently in its own hidden Chrome; 🔴 Live shows the bot's own browser. |
 | v0.3 rev C | 09-11-2026 | Product renamed to Toshi Bot (app v0.9 rev A). |
 | v0.3 rev B | 09-11-2026 | Rule 14: rule book, CLAUDE.md, settings and guard hook locked against agent edits. Local Diwali Bot exception (agent-made) not kept. |
 | v0.3 rev A | 09-11-2026 | v0.8: handoffs between agents, WhatsApp via WhatsApp agent after Haan (rule 12 relaxed), rename agents, 🖥 Live screen. Guard hook v0.3. |
