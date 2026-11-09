@@ -7,7 +7,7 @@
 <title>Toshi Agents</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Agents Chat App v0.8 rev A (09-11-2026). Same look as the approved mock. */
+/* Toshi Agents Chat App v0.8 rev B (09-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -239,7 +239,10 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
       <div class="note">Runs only while the Mac mini is on. Sends and deletes still wait for your Haan.</div>
     </div>
     <div class="form" id="paneSet" hidden>
-      <h4 style="margin:0">Phone notifications (free ntfy app)</h4>
+      <h4 style="margin:0">App update</h4>
+      <div class="btns"><button class="btn pri" id="upd" type="button">⬆️ Update app</button><span class="msg" id="updMsg"></span></div>
+      <div class="note">Gets the latest version from GitHub and restarts. Takes about 10 seconds.</div>
+      <h4 style="margin:10px 0 0">Phone notifications (free ntfy app)</h4>
       <div class="note">1. Install <b>ntfy</b> on iPhone (App Store). 2. Tap + and subscribe to the topic below. 3. Turn on and press Test. Only a short line like "LinkedIn Desk finished" is sent, never your data.</div>
       <div class="f2">
         <div class="fld"><label for="nTopic">Private topic name</label><input type="text" id="nTopic"></div>
@@ -490,6 +493,22 @@ function openLive() { $('livePanel').hidden = false; liveFrame(); clearInterval(
 function closeLive() { $('livePanel').hidden = true; clearInterval(liveTimer); liveTimer = null; }
 $('liveBtn').onclick = () => { if ($('livePanel').hidden) { openLive(); liveAuto = true; } else { closeLive(); liveAuto = false; } try { localStorage.setItem('liveAuto', liveAuto ? '1' : '0'); } catch {} };
 $('liveClose').onclick = () => { closeLive(); liveAuto = false; try { localStorage.setItem('liveAuto', '0'); } catch {} };
+
+// ---------- One-tap update ----------
+async function doUpdate(discard) {
+  $('updMsg').textContent = 'Updating…'; $('upd').disabled = true;
+  try {
+    const r = await fetch('/api/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ discard: !!discard }) });
+    const d = await r.json();
+    if (r.status === 409) {
+      $('updMsg').textContent = 'Local changes in: ' + d.files.join(', ') + '. ';
+      const b = el('button', 'btn', 'Save a copy & update'); b.onclick = () => { b.remove(); doUpdate(true); }; $('updMsg').append(b);
+    } else if (!r.ok) { $('updMsg').textContent = d.error; }
+    else { $('updMsg').textContent = d.msg; if (d.restart) setTimeout(() => location.reload(), 9000); }
+  } catch (e) { $('updMsg').textContent = 'Restarting… refresh in a few seconds.'; setTimeout(() => location.reload(), 9000); }
+  $('upd').disabled = false;
+}
+$('upd').onclick = () => doUpdate(false);
 
 // ---------- Watch screen ----------
 let tsIp = '';

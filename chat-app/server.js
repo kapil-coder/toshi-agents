@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.8 rev A';
+const VERSION = 'v0.8 rev B';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -439,6 +439,28 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/handoff-ui') {
       const b = await readBody(req); const r = queueHandoff(String(b.from || 'mr-c'), String(b.to || ''), String(b.msg || '').trim(), 0);
       return json(res, r.error ? 400 : 200, r);
+    }
+    if (req.method === 'POST' && url.pathname === '/api/update') {
+      // One-tap update: git pull, then exit so launchd restarts the app with the new code.
+      const b = await readBody(req);
+      const git = (args, cb) => execFile('git', args, { cwd: PROJECT, timeout: 60000 }, (e, out, err) => cb(e, String(out || ''), String(err || '')));
+      return git(['status', '--porcelain', '--untracked-files=no'], (e0, changed) => {
+        const files = changed.split('\n').filter(l => l.trim()).map(l => l.slice(3).trim());
+        const go = () => git(['pull', '--ff-only'], (e, out, err) => {
+          if (e) return json(res, 500, { error: 'Update failed: ' + (err || e.message).slice(-400) });
+          const head = out.includes('Already up to date') ? 'Already up to date.' : 'Updated. Restarting…';
+          json(res, 200, { ok: true, msg: head, restart: !out.includes('Already up to date') });
+          if (!out.includes('Already up to date')) setTimeout(() => process.exit(0), 800); // launchd KeepAlive starts the new version
+        });
+        if (!files.length) return go();
+        if (!b.discard) return json(res, 409, { error: 'Local changes block the update', files });
+        // keep a copy of the local edits in iCloud, then discard them
+        git(['diff'], (e1, diff) => {
+          const dir = path.join(STORE, 'backups'); fs.mkdirSync(dir, { recursive: true });
+          fs.writeFileSync(path.join(dir, 'local-changes-' + nowIST().date + '-' + Date.now() + '.diff'), diff);
+          git(['checkout', '--', ...files], e2 => e2 ? json(res, 500, { error: 'Could not reset local changes: ' + e2.message }) : go());
+        });
+      });
     }
     if (req.method === 'POST' && url.pathname === '/api/seen') {
       const b = await readBody(req); if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });
