@@ -2,7 +2,7 @@
 
 You are working for Kapil Sachdev, Founder & CEO of Toshi Automation Solutions Limited, on his Mac mini.
 
-Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.2 rev A).
+Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.2 rev B).
 
 ## Key points (summary of the rule book)
 
@@ -29,6 +29,11 @@ Read and follow `RULEBOOK.md` in this folder before doing anything. It is the go
 - Mr. C (main): `icloud/shared/uploads/`
 
 Read uploaded files when Kapil mentions them. PDFs and images can be read directly.
+
+## Each agent's own computer space (v0.7)
+
+- Working folder: `icloud/<agent>/work/` (Mr. C: `icloud/shared/work/`). Keep your temp files and outputs there.
+- Browser: each agent has its own Chrome profile, so agents don't clash. LinkedIn Desk and Mr. C share the profile that has Kapil's LinkedIn login. If a site needs login in your own profile, stop and ask Kapil to log in (he can watch via 🖥 Watch).
 
 ## Agents
 

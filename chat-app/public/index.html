@@ -7,7 +7,7 @@
 <title>Toshi Agents</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Agents Chat App v0.6 rev A (09-11-2026). Same look as the approved mock. */
+/* Toshi Agents Chat App v0.7 rev A (09-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -135,6 +135,7 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
         <div><b id="hname">Mr. C</b><span class="role" id="hrole"></span></div>
         <div class="headbtns">
           <div class="mode" role="group" aria-label="Personality"><button id="fun">Fun</button><button id="pro" class="on">Pro</button></div>
+          <button class="ghost" id="watch" title="See the Mac mini screen">🖥 Watch</button>
           <button class="ghost" id="clear" title="Start a fresh conversation">New chat</button>
         </div>
       </div>
@@ -192,6 +193,20 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
       <div class="fld"><label for="fRules">Hard rules (one per line)</label><textarea id="fRules" rows="4"></textarea></div>
       <div class="opts"><label><input type="checkbox" id="fPaused"> Start paused</label></div>
       <div class="btns"><button class="btn pri" id="save" type="button">Save agent</button><span class="msg" id="smsg"></span></div>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="watchBox" hidden>
+  <div class="sheet" role="dialog" aria-label="Watch Mac screen" style="width:min(560px,100%)">
+    <header><b>🖥 Watch the Mac mini screen</b><button class="ghost" id="closeWatch">Close</button></header>
+    <div class="form">
+      <div class="note">See what the agents do in their browser windows, live. Works only inside Tailscale (private).</div>
+      <div class="item"><b>One time on the Mac mini</b><div class="task">System Settings → General → Sharing → <b>Screen Sharing: ON</b></div></div>
+      <div class="item"><b>MacBook Air / Mac</b><div class="task">Tap below (Tailscale ON). It opens Screen Sharing; log in with your Mac password.</div>
+        <div class="btns"><a class="btn pri" id="vncLink" href="#">Open screen</a></div></div>
+      <div class="item"><b>iPhone</b><div class="task">Install a VNC app (e.g. RealVNC Viewer, free). Add a connection to the address below and use your Mac login.</div>
+        <div class="btns"><span class="file" id="vncAddr">…</span><button class="btn" id="copyAddr" type="button">Copy address</button></div></div>
     </div>
   </div>
 </div>
@@ -441,7 +456,7 @@ $('save').onclick = async () => {
 };
 // Auto-refresh: shows messages typed on the other device (Mac mini / iPhone / MacBook)
 async function poll() {
-  if (document.hidden || busyAgents.has(cur) || !$('overlay').hidden || !$('auto').hidden) return;
+  if (document.hidden || busyAgents.has(cur) || !$('overlay').hidden || !$('auto').hidden || !$('watchBox').hidden) return;
   try {
     const d = await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json();
     if (shown.agent !== cur) return;
@@ -450,6 +465,19 @@ async function poll() {
   } catch {}
 }
 setInterval(poll, 4000);
+
+// ---------- Watch screen ----------
+let tsIp = '';
+$('watch').onclick = async () => {
+  try { const s = await (await fetch('/api/status')).json(); tsIp = s.tsIp || ''; } catch {}
+  const addr = tsIp || 'kapils-mac-mini';
+  $('vncAddr').textContent = addr; $('vncLink').href = 'vnc://' + addr; $('watchBox').hidden = false;
+};
+$('closeWatch').onclick = () => { $('watchBox').hidden = true; };
+$('copyAddr').onclick = async () => {
+  try { await navigator.clipboard.writeText($('vncAddr').textContent); $('copyAddr').textContent = 'Copied ✓'; }
+  catch { const r = document.createRange(); r.selectNodeContents($('vncAddr')); getSelection().removeAllRanges(); getSelection().addRange(r); $('copyAddr').textContent = 'Selected, press Copy'; }
+};
 
 // ---------- Automation: schedules + settings ----------
 const DAYN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];

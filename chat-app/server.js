@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.6 rev A';
+const VERSION = 'v0.7 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -20,6 +20,11 @@ fs.mkdirSync(DATA, { recursive: true });
 
 const SEND_RE = /send|reply|forward|trash|delete|spam|share_file|create|update|upsert|post|remove|approve|purchase|merge/i;
 const running = new Map(); // agent -> child process
+const SHARED_BROWSER = new Set(['mr-c', 'linkedin-desk']);
+function tailscaleIp() {
+  for (const list of Object.values(os.networkInterfaces())) for (const n of list || []) if (n.family === 'IPv4' && /^100\./.test(n.address)) return n.address;
+  return '';
+}
 let claudeVersion = 'checking…';
 execFile('claude', ['--version'], (e, out) => { claudeVersion = e ? 'not found' : String(out).trim(); });
 
@@ -85,7 +90,14 @@ function runClaude(agent, message, opts, onEvent) {
   args.push('--', message);
 
   // Tools Kapil approved with Haan for this run: the guard hook allows exactly these
-  const child = spawn('claude', args, { cwd: PROJECT, env: { ...process.env, TOSHI_ALLOW: allow.join(' ') } });
+  // Own browser per agent (LinkedIn Desk and Mr. C keep the shared profile with the LinkedIn login)
+  const env = { ...process.env, TOSHI_ALLOW: allow.join(' '), TOSHI_AGENT: agent };
+  if (!SHARED_BROWSER.has(agent)) {
+    env.TOSHI_BROWSER_PROFILE = path.join(os.homedir(), '.toshi-agents', 'chrome-profiles', agent);
+    env.TOSHI_BROWSER_OUTPUT = path.join(os.homedir(), '.toshi-agents', 'browser-output', agent);
+  }
+  if (fs.existsSync(ICLOUD)) fs.mkdirSync(path.join(ICLOUD, agent === 'mr-c' ? 'shared' : agent, 'work'), { recursive: true });
+  const child = spawn('claude', args, { cwd: PROJECT, env });
   running.set(agent, child);
   let buf = '', finalText = [], sessionId = chat.sessionId, denials = [], errText = '';
   child.stdout.on('data', d => {
@@ -262,7 +274,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/status') {
       return json(res, 200, {
         app: VERSION, claude: claudeVersion, host: os.hostname(), uptime: os.uptime(),
-        mac: os.release(), freeMem: os.freemem(), totalMem: os.totalmem(),
+        mac: os.release(), tsIp: tailscaleIp(), user: os.userInfo().username, freeMem: os.freemem(), totalMem: os.totalmem(),
         icloud: fs.existsSync(ICLOUD), chats: DATA.replace(os.homedir(), '~'), time: stamp(),
       });
     }
