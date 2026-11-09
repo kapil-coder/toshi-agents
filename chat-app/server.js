@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.9 rev C';
+const VERSION = 'v0.9 rev D';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -88,6 +88,8 @@ function runClaude(agent, message, opts, onEvent) {
   const chat = loadChat(agent);
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'default'];
   if (agent !== 'mr-c') args.push('--agent', agent);
+  const model = (getSettings().models || {})[agent];
+  if (['opus', 'sonnet', 'haiku'].includes(model)) args.push('--model', model); // per-bot model (v0.9 rev D)
   if (chat.sessionId) args.push('--resume', chat.sessionId);
   const allow = [...new Set([...(chat.allow || []), ...(opts.allowOnce || [])])];
   if (allow.length) args.push('--allowedTools', ...allow);
@@ -576,6 +578,11 @@ const server = http.createServer(async (req, res) => {
           s.notify = !!b.notify;
           if (b.ntfyTopic !== undefined) { if (b.ntfyTopic && !/^[A-Za-z0-9_-]{8,64}$/.test(b.ntfyTopic)) return json(res, 400, { error: 'Topic: 8-64 letters, numbers, - or _' }); s.ntfyTopic = b.ntfyTopic; }
           writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
+        }
+        if (b.action === 'model') {
+          if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });
+          const m = String(b.model || ''); if (m && !['opus', 'sonnet', 'haiku'].includes(m)) return json(res, 400, { error: 'Unknown model.' });
+          s.models = s.models || {}; if (m) s.models[b.id] = m; else delete s.models[b.id]; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
         }
         if (b.action === 'showBrowser') { s.showBrowser = !!b.on; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'test') { notify('Toshi Bot test', 'Notifications are working. ' + stamp() + ' IST'); return json(res, 200, { ok: true }); }
