@@ -1,4 +1,4 @@
-# Toshi Agents
+# Toshi Bot
 
 Version: v0.1 rev B | 08-11-2026 | Runs on: Mac mini M4 (macOS Tahoe 26.5.1) with Claude Code
 

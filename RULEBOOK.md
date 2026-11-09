@@ -1,8 +1,8 @@
-# Toshi Agents: Golden Rule Book
+# Toshi Bot: Golden Rule Book
 
-Version: v0.3 rev B | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
+Version: v0.3 rev C | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
 
-This rule book applies to every Toshi agent run with Claude Code on the Mac mini.
+This rule book applies to every Toshi Bot agent run with Claude Code on the Mac mini. (Product renamed from "Toshi Agents" to "Toshi Bot" on 09-11-2026; folder and repo names stay toshi-agents.)
 Each agent's own charter (kept privately in iCloud) adds detail. If they disagree, the stricter rule wins.
 
 ## 1. Software and versions
@@ -13,12 +13,12 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Claude Code | 2.1.x (keep updated with `claude update`) |
 | Node.js | Current LTS (needed for the browser tool) |
 | Playwright MCP (browser tool) | 0.0.83 (pinned, via scripts/browser-mcp.sh) |
-| Rule book | v0.3 rev B |
+| Rule book | v0.3 rev C |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
 | Guard hook | v0.3 rev A |
-| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update) | v0.8 rev E |
+| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update) | v0.9 rev A |
 
 ## 2. Rules for every agent
 
@@ -101,6 +101,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v0.3 rev C | 09-11-2026 | Product renamed to Toshi Bot (app v0.9 rev A). |
 | v0.3 rev B | 09-11-2026 | Rule 14: rule book, CLAUDE.md, settings and guard hook locked against agent edits. Local Diwali Bot exception (agent-made) not kept. |
 | v0.3 rev A | 09-11-2026 | v0.8: handoffs between agents, WhatsApp via WhatsApp agent after Haan (rule 12 relaxed), rename agents, 🖥 Live screen. Guard hook v0.3. |
 | v0.2 rev D | 09-11-2026 | App v0.7 rev C: delete (archive) user-made agents from ⚙️ Settings. |

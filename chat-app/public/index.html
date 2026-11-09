@@ -4,10 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>Toshi Agents</title>
+<meta name="apple-mobile-web-app-title" content="Toshi Bot">
+<title>Toshi Bot</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Agents Chat App v0.8 rev E (09-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v0.9 rev A (09-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -131,7 +132,7 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 <div class="mac">
   <div class="titlebar">
     <span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span>
-    <span class="t" id="title">Toshi Agents</span>
+    <span class="t" id="title">Toshi Bot</span>
   </div>
   <div class="app">
     <nav class="side" id="side" aria-label="Agents"><h4>My agents</h4></nav>
@@ -429,7 +430,7 @@ async function status() {
     const h = Math.floor(s.uptime / 3600); $('sUp').textContent = Math.floor(h / 24) + 'd ' + (h % 24) + 'h';
     $('sMem').textContent = (s.freeMem / 1e9).toFixed(1) + ' / ' + (s.totalMem / 1e9).toFixed(0) + ' GB';
     $('sIcloud').textContent = s.icloud ? 'Linked' : 'Not linked'; $('sIcloud').className = s.icloud ? 'ok' : 'warn';
-    $('title').textContent = 'Toshi Agents ' + s.app + ' · ' + s.host + ' · ' + s.time + ' IST';
+    $('title').textContent = 'Toshi Bot ' + s.app + ' · ' + s.host + ' · ' + s.time + ' IST';
     $('sOnline').textContent = 'Online'; $('sOnline').className = 'pill ok';
   } catch { $('sOnline').textContent = 'Offline'; $('sOnline').className = 'pill bad'; }
 }

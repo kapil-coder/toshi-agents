@@ -1,4 +1,4 @@
-// Toshi Agents Chat App v0.4 rev A (08-11-2026)
+// Toshi Bot Chat App v0.4 rev A (08-11-2026)
 // Local web app on the Mac mini: chat with Claude Code agents, approve actions, add agents.
 // No npm packages needed. Run:  node chat-app/server.js   then open http://localhost:3737
 'use strict';
@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.8 rev E';
+const VERSION = 'v0.9 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -94,7 +94,7 @@ function runClaude(agent, message, opts, onEvent) {
   const tone = opts.tone === 'fun'
     ? 'Tone for this chat: Fun, witty and cheeky (Grok style), still accurate and brief. Hinglish with "aap".'
     : 'Tone for this chat: Professional, brief, bullet points. Hinglish with "aap" when talking to Kapil.';
-  args.push('--append-system-prompt', tone + ' Your name in the Toshi Agents app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.');
+  args.push('--append-system-prompt', tone + ' Your name in the Toshi Bot app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.');
   args.push('--', message);
 
   // Tools Kapil approved with Haan for this run: the guard hook allows exactly these
@@ -156,7 +156,7 @@ model: inherit
 ---
 
 You are **${f.name}** v0.1 for Kapil Sachdev, Founder & CEO of Toshi Automation Solutions Limited.
-Created ${stamp()} IST from the Toshi Agents app${f.source ? ' (imported from Grok)' : ''}.
+Created ${stamp()} IST from the Toshi Bot app${f.source ? ' (imported from Grok)' : ''}.
 
 ## Before anything else
 1. Read \`RULEBOOK.md\` (golden rule book). It always wins.
@@ -230,10 +230,10 @@ function startRun(agent, text, opts, onEvent, meta = {}) {
   const what = meta.handoff ? 'Task from ' + meta.from : 'Scheduled task ' + meta.time;
   return runClaude(agent, text, opts, ev => {
     onEvent(ev);
-    if (meta.scheduled && ev.t === 'approve') notify('Toshi: ' + agentName(agent) + ' needs your Haan', what + ' is waiting for your approval.');
+    if (meta.scheduled && ev.t === 'approve') notify('Toshi Bot: ' + agentName(agent) + ' needs your Haan', what + ' is waiting for your approval.');
     if (meta.scheduled && ev.t === 'done') {
       const cc = loadChat(agent); cc.unread = true; saveChat(agent, cc);
-      if (!cc.pending) notify('Toshi: ' + agentName(agent) + ' finished', what + ' is done. Open the app to see the result.');
+      if (!cc.pending) notify('Toshi Bot: ' + agentName(agent) + ' finished', what + ' is done. Open the app to see the result.');
       if (meta.handoff) setTimeout(drainHandoffs, 1000);
     }
   });
@@ -499,7 +499,7 @@ const server = http.createServer(async (req, res) => {
           if (b.ntfyTopic !== undefined) { if (b.ntfyTopic && !/^[A-Za-z0-9_-]{8,64}$/.test(b.ntfyTopic)) return json(res, 400, { error: 'Topic: 8-64 letters, numbers, - or _' }); s.ntfyTopic = b.ntfyTopic; }
           writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
         }
-        if (b.action === 'test') { notify('Toshi Agents test', 'Notifications are working. ' + stamp() + ' IST'); return json(res, 200, { ok: true }); }
+        if (b.action === 'test') { notify('Toshi Bot test', 'Notifications are working. ' + stamp() + ' IST'); return json(res, 200, { ok: true }); }
         if (b.action === 'addFolder') { const r = folderOk(b.path); if (r.error) return json(res, 400, r); setFolders([...new Set([...getFolders(), r.full])]); return json(res, 200, { ok: true }); }
         if (b.action === 'removeFolder') {
           if (String(b.path).includes('com~apple~CloudDocs/ToshiAgents')) return json(res, 400, { error: 'The ToshiAgents iCloud folder is required.' });
@@ -511,7 +511,7 @@ const server = http.createServer(async (req, res) => {
   } catch (e) { json(res, 500, { error: e.message }); }
 });
 server.listen(PORT, HOST, () => {
-  console.log(`Toshi Agents app ${VERSION} running: http://localhost:${PORT}`);
+  console.log(`Toshi Bot app ${VERSION} running: http://localhost:${PORT}`);
   console.log(`Chats saved in: ${DATA}`);
   console.log('Keep this window open. Press Ctrl+C to stop.');
 });
