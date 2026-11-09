@@ -4,3 +4,4 @@ icloud
 *.log
 .DS_Store
 .data
+.claude/agents-archive

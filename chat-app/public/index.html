@@ -7,7 +7,7 @@
 <title>Toshi Agents</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Agents Chat App v0.7 rev B (09-11-2026). Same look as the approved mock. */
+/* Toshi Agents Chat App v0.7 rev C (09-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -234,6 +234,9 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
         <div class="fld"><span class="lbl">Status</span><div class="opts"><label><input type="checkbox" id="nOn"> Notifications on</label></div></div>
       </div>
       <div class="btns"><button class="btn pri" id="nSave" type="button">Save</button><button class="btn" id="nTest" type="button">Send test</button><span class="msg" id="nMsg"></span></div>
+      <h4 style="margin:10px 0 0">My agents</h4>
+      <div class="list" id="agentList"></div>
+      <div class="note">Delete moves the agent to an archive folder (not lost). Its chat history stays in iCloud. Built-in agents can't be deleted.</div>
       <h4 style="margin:10px 0 0">Mac folders agents may use</h4>
       <div class="list" id="folderList"></div>
       <div class="f2">
@@ -509,6 +512,20 @@ $('sSave').onclick = async () => {
 async function loadSettings() {
   const s = await (await fetch('/api/settings')).json();
   $('nTopic').value = s.ntfyTopic || ('toshi-' + Math.random().toString(36).slice(2, 12)); $('nOn').checked = !!s.notify;
+  const al = $('agentList'); al.replaceChildren();
+  for (const a of agents) {
+    const it = el('div', 'item'); const top = el('div', 'top'); top.append(el('b', null, a.name), el('span', 'meta', a.id));
+    if (['mr-c', 'investor-desk', 'linkedin-desk'].includes(a.id)) top.append(el('span', 'meta', '· built-in'));
+    else {
+      let armed = false; const del = el('button', 'btn', 'Delete');
+      del.onclick = () => {
+        if (!armed) { armed = true; del.textContent = 'Sure? Tap again'; return; }
+        post('/api/agents', { action: 'delete', id: a.id }).then(() => { if (cur === a.id) cur = 'mr-c'; return loadAgents(); }).then(loadSettings).catch(e => { del.textContent = e.message; });
+      };
+      top.append(del);
+    }
+    it.append(top); al.append(it);
+  }
   const fl = $('folderList'); fl.replaceChildren();
   for (const f of s.folders) {
     const it = el('div', 'item'); const top = el('div', 'top'); top.append(el('span', 'meta', f));

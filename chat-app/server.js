@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.7 rev B';
+const VERSION = 'v0.7 rev C';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -21,6 +21,7 @@ fs.mkdirSync(DATA, { recursive: true });
 const SEND_RE = /send|reply|forward|trash|delete|spam|share_file|create|update|upsert|post|remove|approve|purchase|merge/i;
 const running = new Map(); // agent -> child process
 const SHARED_BROWSER = new Set(['mr-c', 'linkedin-desk']);
+const BUILT_IN = new Set(['mr-c', 'investor-desk', 'linkedin-desk']);
 function tailscaleIp() {
   for (const list of Object.values(os.networkInterfaces())) for (const n of list || []) if (n.family === 'IPv4' && /^100\./.test(n.address)) return n.address;
   return '';
@@ -324,6 +325,18 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/agents') {
       const b = await readBody(req);
+      if (b.action === 'delete') {
+        // Archive, never hard-delete. Built-in agents (in GitHub) and Mr. C cannot be removed here.
+        const id = String(b.id || '');
+        if (BUILT_IN.has(id)) return json(res, 400, { error: 'Built-in agent. It cannot be deleted from the app.' });
+        const file = path.join(AGENTS_DIR, id.replace(/[^a-z0-9-]/gi, '') + '.md');
+        if (!fs.existsSync(file)) return json(res, 404, { error: 'Agent not found.' });
+        if (running.has(id)) return json(res, 409, { error: 'Agent is working right now. Try again when it finishes.' });
+        const arch = path.join(PROJECT, '.claude', 'agents-archive'); fs.mkdirSync(arch, { recursive: true });
+        fs.renameSync(file, path.join(arch, id + '-' + nowIST().date + '.md'));
+        const list = loadSchedules().filter(s => s.agent !== id); saveSchedules(list);
+        return json(res, 200, { ok: true });
+      }
       if (!b.name || !slugify(b.name)) return json(res, 400, { error: 'Agent name is required.' });
       const { id, text } = agentFile(b);
       const file = path.join(AGENTS_DIR, id + '.md');
