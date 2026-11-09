@@ -8,7 +8,7 @@
 <title>Toshi Bot</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v0.9 rev D (09-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v0.9 rev E (10-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -74,6 +74,9 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .composer textarea{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px 12px;resize:none;height:44px;max-height:140px}
 .send{border:0;background:var(--accent);color:var(--accent-ink);font-weight:700;padding:0 16px;border-radius:10px;cursor:pointer}
 .send:disabled{opacity:.5;cursor:default}
+.mic{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;width:44px;cursor:pointer;font-size:18px;position:relative}
+.mic.rec{background:#c0392b;border-color:#c0392b;animation:pulse 1s infinite}
+.mic small{position:absolute;bottom:1px;right:3px;font:9px var(--f-mono);color:var(--muted)}
 .clip{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;width:44px;cursor:pointer;font-size:18px}
 .files{display:flex;gap:6px;flex-wrap:wrap;padding:0 16px}
 .file{font:11.5px var(--f-mono);border:1px solid var(--line);background:var(--surface-2);border-radius:8px;padding:4px 8px}
@@ -157,6 +160,7 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
       <form class="composer" id="form">
         <button class="clip" id="clip" type="button" title="Attach files (or drag them here)" aria-label="Attach files">📎</button>
         <input type="file" id="fileIn" multiple hidden>
+        <button class="mic" id="mic" type="button" title="Speak your message (tap again to stop). Long-press to switch Hindi / English." aria-label="Speak message">🎤<small id="micLang">HI</small></button>
         <textarea id="inp" placeholder="Message…" aria-label="Message"></textarea>
         <button class="send" id="sendBtn" type="submit">Send</button>
       </form>
@@ -501,6 +505,38 @@ function openLive() { $('livePanel').hidden = false; liveFrame(); clearInterval(
 function closeLive() { $('livePanel').hidden = true; clearInterval(liveTimer); liveTimer = null; }
 $('liveBtn').onclick = () => { if ($('livePanel').hidden) { openLive(); liveAuto = true; } else { closeLive(); liveAuto = false; } try { localStorage.setItem('liveAuto', liveAuto ? '1' : '0'); } catch {} };
 $('liveClose').onclick = () => { closeLive(); liveAuto = false; try { localStorage.setItem('liveAuto', '0'); } catch {} };
+
+// ---------- Mic: speak your message (Web Speech API, works in Chrome and Safari) ----------
+(function () {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const btn = $('mic');
+  if (!SR) { btn.title = "Voice not supported in this browser. Use the keyboard's 🎤 dictation key instead."; btn.style.opacity = '.4'; btn.onclick = () => { $('inp').placeholder = "Use your keyboard's 🎤 dictation key"; $('inp').focus(); }; return; }
+  let lang = 'hi-IN'; try { lang = localStorage.getItem('micLang') || 'hi-IN'; } catch {}
+  const showLang = () => { $('micLang').textContent = lang === 'hi-IN' ? 'HI' : 'EN'; };
+  showLang();
+  let rec = null, base = '', hold = null, longPressed = false;
+  function stop() { if (rec) { try { rec.stop(); } catch {} } }
+  function start() {
+    rec = new SR(); rec.lang = lang; rec.interimResults = true; rec.continuous = true;
+    base = $('inp').value ? $('inp').value.replace(/\s*$/, ' ') : '';
+    rec.onresult = e => {
+      let fin = '', mid = '';
+      for (let i = 0; i < e.results.length; i++) (e.results[i].isFinal ? (fin += e.results[i][0].transcript) : (mid += e.results[i][0].transcript));
+      $('inp').value = base + fin + mid;
+    };
+    rec.onerror = e => { $('inp').placeholder = e.error === 'not-allowed' ? 'Allow microphone for this site (browser settings), then try again.' : 'Voice error: ' + e.error; };
+    rec.onend = () => { btn.classList.remove('rec'); rec = null; $('inp').focus(); };
+    try { rec.start(); btn.classList.add('rec'); $('inp').placeholder = lang === 'hi-IN' ? 'Boliye… (tap 🎤 to stop)' : 'Speak… (tap 🎤 to stop)'; } catch { btn.classList.remove('rec'); }
+  }
+  // long-press (or right-click) switches Hindi/Hinglish <-> English
+  const toggleLang = () => { lang = lang === 'hi-IN' ? 'en-IN' : 'hi-IN'; try { localStorage.setItem('micLang', lang); } catch {} showLang(); };
+  btn.addEventListener('pointerdown', () => { longPressed = false; hold = setTimeout(() => { longPressed = true; toggleLang(); }, 600); });
+  btn.addEventListener('pointerup', () => clearTimeout(hold));
+  btn.addEventListener('pointerleave', () => clearTimeout(hold));
+  btn.addEventListener('contextmenu', e => { e.preventDefault(); });
+  btn.onclick = () => { if (longPressed) return; rec ? stop() : start(); };
+  $('form').addEventListener('submit', stop, true);
+})();
 
 // ---------- One-tap update ----------
 async function doUpdate(discard) {
