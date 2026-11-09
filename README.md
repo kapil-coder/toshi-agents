@@ -51,7 +51,10 @@ Home of the app: **iCloud Drive → ToshiAgents → app** (private, synced, back
 - "Needs your OK" cards = your Haan. "Always allow" only works for read-only tools; sends always ask.
 - Chats are saved in iCloud Drive/ToshiAgents/chats.
 - 📎 button or drag and drop: files go to iCloud (Investor Desk: `investor-desk/docs`, others: `<agent>/uploads`, Mr. C: `shared/uploads`). Max 100 MB per file.
-- Phone and MacBook access comes in v0.5 (Tailscale).
+- **Auto-start + iPhone/MacBook access (one time):** `~/toshi-agents/scripts/install-autostart.sh`
+  - App starts by itself at login and after a power cut; no Terminal window needed.
+  - Open on iPhone/MacBook (Tailscale ON): https://kapils-mac-mini.tailac1d46.ts.net
+  - Log file: `~/.toshi-agents/app.log`. Remove auto-start: `install-autostart.sh --remove`
 
 ## Daily use (Terminal way)
 
@@ -83,6 +86,7 @@ When Claude asks permission for a send, reply or delete, that prompt **is** your
 | Guard hook | v0.1 rev A |
 | Setup script | v0.1 rev B |
 | Chat app | v0.4 rev D |
+| Auto-start + phone access | v0.5 rev A |
 | Playwright MCP | 0.0.83 (pinned in `.mcp.json`) |
 | Claude Code | 2.1.x (run `claude update`) |
 
