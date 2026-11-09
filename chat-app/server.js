@@ -3,12 +3,13 @@
 // No npm packages needed. Run:  node chat-app/server.js   then open http://localhost:3737
 'use strict';
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.5 rev C';
+const VERSION = 'v0.6 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -168,6 +169,86 @@ ${f.paused ? 'PAUSED. Do nothing until Kapil says resume.' : 'Active. Work only 
 ` };
 }
 
+
+// ---------- app settings, schedules, notifications (v0.6) ----------
+const STORE = path.dirname(DATA); // iCloud/ToshiAgents (or .data)
+const SETTINGS_FILE = path.join(STORE, 'app-settings.json');
+const SCHED_FILE = path.join(STORE, 'schedules.json');
+const LOCAL_SETTINGS = path.join(PROJECT, '.claude', 'settings.local.json');
+const readJSON = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
+const writeJSON = (f, o) => fs.writeFileSync(f, JSON.stringify(o, null, 1));
+function getSettings() {
+  return Object.assign({ ntfyTopic: '', notify: false, appUrl: 'https://kapils-mac-mini.tailac1d46.ts.net' }, readJSON(SETTINGS_FILE, {}));
+}
+const agentName = id => (listAgents().find(a => a.id === id) || { name: id }).name;
+
+// Phone push via the free ntfy app. Only a short, non-confidential line is sent.
+function notify(title, body) {
+  const s = getSettings();
+  if (!s.notify || !/^[A-Za-z0-9_-]{8,64}$/.test(s.ntfyTopic)) return;
+  const req = https.request({ hostname: 'ntfy.sh', path: '/' + s.ntfyTopic, method: 'POST',
+    headers: { Title: title.replace(/[^\x20-\x7E]/g, ''), Click: s.appUrl, Tags: 'robot' } }, r => r.resume());
+  req.on('error', () => {}); req.end(body.slice(0, 200));
+}
+
+// IST clock
+function nowIST() {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', weekday: 'short', hour12: false }).formatToParts(new Date()).map(x => [x.type, x.value]));
+  const dow = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday);
+  return { date: `${p.year}-${p.month}-${p.day}`, min: Number(p.hour) % 24 * 60 + Number(p.minute), dow };
+}
+const toMin = t => { const m = /^(\d{1,2}):(\d{2})$/.exec(t); return m ? Number(m[1]) * 60 + Number(m[2]) : -1; };
+const loadSchedules = () => readJSON(SCHED_FILE, []);
+const saveSchedules = l => writeJSON(SCHED_FILE, l);
+
+// Start one agent run (used by chat and by schedules)
+function startRun(agent, text, opts, onEvent, meta = {}) {
+  const c = loadChat(agent);
+  if (opts.always && Array.isArray(opts.allowOnce)) c.allow = [...new Set([...(c.allow || []), ...opts.allowOnce.filter(t => !SEND_RE.test(t))])];
+  c.messages.push({ who: 'me', text: meta.label ? meta.label + '\n' + text : text, at: stamp() }); delete c.pending; saveChat(agent, c);
+  return runClaude(agent, text, opts, ev => {
+    onEvent(ev);
+    if (meta.scheduled && ev.t === 'approve') notify('Toshi: ' + agentName(agent) + ' needs your Haan', 'Scheduled task ' + meta.time + ' is waiting for your approval.');
+    if (meta.scheduled && ev.t === 'done') {
+      const cc = loadChat(agent); cc.unread = true; saveChat(agent, cc);
+      if (!cc.pending) notify('Toshi: ' + agentName(agent) + ' finished', 'Scheduled task ' + meta.time + ' is done. Open the app to see the result.');
+    }
+  });
+}
+
+// Scheduler: checks every 30 s; runs a task within 10 min of its time, once per day per time.
+function tick() {
+  const n = nowIST(); const list = loadSchedules(); let changed = false;
+  for (const s of list) {
+    if (!s.enabled || !validAgent(s.agent)) continue;
+    if (Array.isArray(s.days) && s.days.length && !s.days.includes(n.dow)) continue;
+    for (const t of s.times || []) {
+      const tm = toMin(t); if (tm < 0 || n.min < tm || n.min >= tm + 10) continue;
+      s.last = s.last || {}; if (s.last[t] === n.date) continue;
+      if (running.has(s.agent)) continue; // busy: try again on the next tick
+      s.last[t] = n.date; changed = true;
+      startRun(s.agent, s.task, { tone: 'pro', allowOnce: [] }, () => {}, { scheduled: true, time: t, label: '⏰ Scheduled ' + t + ' IST' });
+    }
+  }
+  if (changed) saveSchedules(list);
+}
+setInterval(tick, 30000); setTimeout(tick, 5000);
+
+// Folder access (Claude Code additionalDirectories in .claude/settings.local.json)
+function getFolders() { return ((readJSON(LOCAL_SETTINGS, {}).permissions || {}).additionalDirectories || []); }
+function setFolders(list) {
+  const s = readJSON(LOCAL_SETTINGS, {}); s.permissions = s.permissions || {}; s.permissions.additionalDirectories = list; writeJSON(LOCAL_SETTINGS, s);
+}
+function folderOk(p) {
+  const home = os.homedir(); const full = path.resolve(String(p || '').replace(/^~(?=\/|$)/, home));
+  if (!full.startsWith(home + '/') || full.includes('..')) return { error: 'Folder must be inside your home folder.' };
+  const lib = path.join(home, 'Library') + '/';
+  if ((full + '/').startsWith(lib) && !full.startsWith(path.join(home, 'Library', 'Mobile Documents'))) return { error: 'System folders (~/Library) are not allowed.' };
+  if (!fs.existsSync(full) || !fs.statSync(full).isDirectory()) return { error: 'Folder not found: ' + full };
+  return { full };
+}
+
 // ---------- server ----------
 const PUBLIC = path.join(__dirname, 'public');
 const server = http.createServer(async (req, res) => {
@@ -177,7 +258,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       return fs.createReadStream(path.join(PUBLIC, 'index.html')).pipe(res);
     }
-    if (req.method === 'GET' && url.pathname === '/api/agents') return json(res, 200, listAgents().map(a => ({ ...a, busy: running.has(a.id) })));
+    if (req.method === 'GET' && url.pathname === '/api/agents') return json(res, 200, listAgents().map(a => ({ ...a, busy: running.has(a.id), unread: !!loadChat(a.id).unread })));
     if (req.method === 'GET' && url.pathname === '/api/status') {
       return json(res, 200, {
         app: VERSION, claude: claudeVersion, host: os.hostname(), uptime: os.uptime(),
@@ -196,13 +277,8 @@ const server = http.createServer(async (req, res) => {
       if (running.has(b.agent)) return json(res, 409, { error: 'This agent is still working. Wait for it to finish.' });
       const text = String(b.message || '').trim().slice(0, 8000);
       if (!text) return json(res, 400, { error: 'Empty message' });
-      const c = loadChat(b.agent);
-      if (b.always && Array.isArray(b.allowOnce)) {
-        c.allow = [...new Set([...(c.allow || []), ...b.allowOnce.filter(t => !SEND_RE.test(t))])];
-      }
-      c.messages.push({ who: 'me', text, at: stamp() }); delete c.pending; saveChat(b.agent, c);
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-cache' });
-      const child = runClaude(b.agent, text, { tone: b.tone, allowOnce: b.allowOnce || [] }, ev => res.write(JSON.stringify(ev) + '\n'));
+      const child = startRun(b.agent, text, { tone: b.tone, allowOnce: b.allowOnce || [], always: !!b.always }, ev => res.write(JSON.stringify(ev) + '\n'));
       child.on('close', () => setTimeout(() => res.end(), 50));
       return;
     }
@@ -259,6 +335,48 @@ const server = http.createServer(async (req, res) => {
       out.on('finish', () => { if (!tooBig) json(res, 200, { ok: true, path: 'icloud/' + rel + '/' + name, name, size }); });
       out.on('error', e => { if (!tooBig) json(res, 500, { error: e.message }); });
       return;
+    }
+    if (req.method === 'POST' && url.pathname === '/api/seen') {
+      const b = await readBody(req); if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });
+      const c = loadChat(b.agent); if (c.unread) { delete c.unread; saveChat(b.agent, c); } return json(res, 200, { ok: true });
+    }
+    if (url.pathname === '/api/schedules') {
+      if (req.method === 'GET') return json(res, 200, loadSchedules());
+      if (req.method === 'POST') {
+        const b = await readBody(req); const list = loadSchedules();
+        if (b.action === 'delete') { saveSchedules(list.filter(s => s.id !== b.id)); return json(res, 200, { ok: true }); }
+        if (b.action === 'toggle') { const s = list.find(s => s.id === b.id); if (s) s.enabled = !s.enabled; saveSchedules(list); return json(res, 200, { ok: true }); }
+        if (b.action === 'run') {
+          const s = list.find(s => s.id === b.id); if (!s) return json(res, 404, { error: 'Not found' });
+          if (running.has(s.agent)) return json(res, 409, { error: 'That agent is busy right now.' });
+          startRun(s.agent, s.task, { tone: 'pro', allowOnce: [] }, () => {}, { scheduled: true, time: 'now', label: '⏰ Run now (schedule)' });
+          return json(res, 200, { ok: true });
+        }
+        if (!validAgent(b.agent)) return json(res, 400, { error: 'Choose an agent.' });
+        const times = [...new Set(String(b.times || '').split(/[ ,]+/).filter(Boolean))];
+        if (!times.length || times.some(t => toMin(t) < 0 || toMin(t) >= 1440)) return json(res, 400, { error: 'Times must look like 06:00, 13:00, 19:00' });
+        const task = String(b.task || '').trim().slice(0, 4000); if (!task) return json(res, 400, { error: 'Write the task.' });
+        const days = Array.isArray(b.days) ? b.days.map(Number).filter(d => d >= 0 && d <= 6) : [];
+        list.push({ id: Date.now().toString(36), agent: b.agent, times: times.map(t => t.padStart(5, '0')), days, task, enabled: true, created: stamp(), last: {} });
+        saveSchedules(list); return json(res, 200, { ok: true });
+      }
+    }
+    if (url.pathname === '/api/settings') {
+      if (req.method === 'GET') return json(res, 200, { ...getSettings(), folders: getFolders() });
+      if (req.method === 'POST') {
+        const b = await readBody(req); const s = getSettings();
+        if (b.action === 'notify') {
+          s.notify = !!b.notify;
+          if (b.ntfyTopic !== undefined) { if (b.ntfyTopic && !/^[A-Za-z0-9_-]{8,64}$/.test(b.ntfyTopic)) return json(res, 400, { error: 'Topic: 8-64 letters, numbers, - or _' }); s.ntfyTopic = b.ntfyTopic; }
+          writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
+        }
+        if (b.action === 'test') { notify('Toshi Agents test', 'Notifications are working. ' + stamp() + ' IST'); return json(res, 200, { ok: true }); }
+        if (b.action === 'addFolder') { const r = folderOk(b.path); if (r.error) return json(res, 400, r); setFolders([...new Set([...getFolders(), r.full])]); return json(res, 200, { ok: true }); }
+        if (b.action === 'removeFolder') {
+          if (String(b.path).includes('com~apple~CloudDocs/ToshiAgents')) return json(res, 400, { error: 'The ToshiAgents iCloud folder is required.' });
+          setFolders(getFolders().filter(f => f !== b.path)); return json(res, 200, { ok: true });
+        }
+      }
     }
     json(res, 404, { error: 'Not found' });
   } catch (e) { json(res, 500, { error: e.message }); }

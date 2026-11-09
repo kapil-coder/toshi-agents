@@ -1,6 +1,6 @@
 # Toshi Agents: Golden Rule Book
 
-Version: v0.1 rev F | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
+Version: v0.2 rev A | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
 
 This rule book applies to every Toshi agent run with Claude Code on the Mac mini.
 Each agent's own charter (kept privately in iCloud) adds detail. If they disagree, the stricter rule wins.
@@ -13,12 +13,12 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Claude Code | 2.1.x (keep updated with `claude update`) |
 | Node.js | Current LTS (needed for the browser tool) |
 | Playwright MCP (browser tool) | 0.0.83 (pinned) |
-| Rule book | v0.1 rev F |
+| Rule book | v0.2 rev A |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
 | Guard hook | v0.2 rev A |
-| Chat app server | v0.5 rev C |
+| Chat app (schedules, notifications, folders) | v0.6 rev A |
 
 ## 2. Rules for every agent
 
@@ -59,6 +59,13 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Any other LinkedIn message | Ask Kapil |
 | Payments, bids, signing anything | Never |
 
+## 4b. Schedules and notifications (v0.6)
+
+- Any agent can run a task on its own at set IST times (app → ⏰ Schedules). Same rules as chat: drafts and reads run; sends, deletes and anything outgoing wait for Kapil's Haan card.
+- A run starts within 10 minutes of its time, once per day per time. If the Mac mini is off, that run is skipped.
+- Phone notification (ntfy app) says only "<agent> finished" or "<agent> needs your Haan". No business data is sent.
+- Agents may use only the folders listed in app → ⚙️ Settings. ~/Library system folders are never allowed.
+
 ## 5. Agents (v0.1)
 
 | Agent | Job | Status | How to run |
@@ -85,6 +92,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v0.2 rev A | 09-11-2026 | v0.6: Schedules, phone notifications (ntfy), folder access screen. |
 | v0.1 rev F | 09-11-2026 | All agents may create/update Gmail drafts when asked; sending works after Haan card (guard hook v0.2). |
 | v0.1 rev E | 09-11-2026 | Auto-start (launchd) and private phone/MacBook access via Tailscale (v0.5 rev A). |
 | v0.1 rev D | 08-11-2026 | Chat app v0.4 rev C: file upload (📎 / drag and drop) for every agent; upload folders added to agent instructions. |

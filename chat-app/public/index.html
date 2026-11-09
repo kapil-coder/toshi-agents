@@ -7,7 +7,7 @@
 <title>Toshi Agents</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Agents Chat App v0.5 rev C (09-11-2026). Same look as the approved mock. */
+/* Toshi Agents Chat App v0.6 rev A (09-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -98,6 +98,17 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .opts label{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12.5px;cursor:pointer;background:var(--surface-2)}
 .opts input{accent-color:var(--accent)}
 .msg{font-size:12.5px;font-weight:600;min-height:18px}
+.bell{margin-left:auto;font-size:12px;flex:none}
+.list{display:grid;gap:8px}
+.item{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:4px;background:var(--surface-2)}
+.item .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.item b{font-size:13.5px} .item .meta{font:11px var(--f-mono);color:var(--muted)} .item .task{font-size:12.5px;white-space:pre-wrap}
+.item.off{opacity:.55}
+.days{display:flex;gap:4px;flex-wrap:wrap}
+.days label{border:1px solid var(--line);border-radius:7px;padding:4px 8px;font-size:12px;cursor:pointer;background:var(--surface-2)}
+.days input{accent-color:var(--accent)}
+.sched{font-size:12px;padding:4px 8px;display:flex;justify-content:space-between;gap:6px}
+.sched span:last-child{font-family:var(--f-mono);font-size:11px;color:var(--muted)}
 @media (max-width:900px){
   .app{grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr)}
   .panel{display:none}
@@ -149,7 +160,8 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
       <div class="note">Zoho Books and CRM: read-only (blocked by guard).</div>
       <div class="note">Sends, replies, deletes: need your Haan.</div>
       <h4>Scheduled</h4>
-      <div class="note">Automatic schedules arrive in v0.2. For now, run from chat.</div>
+      <div id="schedPanel"><div class="note">None yet</div></div>
+      <div class="note"><button class="ghost" id="openAuto2" type="button">Manage schedules</button></div>
       <h4>Approved for this agent</h4>
       <div class="note" id="allowList">None yet</div>
     </aside>
@@ -184,6 +196,42 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
   </div>
 </div>
 
+<div class="overlay" id="auto" hidden>
+  <div class="sheet" role="dialog" aria-label="Automation">
+    <header><b>Automation</b><button class="ghost" id="closeAuto">Close</button></header>
+    <div class="tabs"><button class="on" id="tabSched" type="button">⏰ Schedules</button><button id="tabSet" type="button">⚙️ Settings</button></div>
+    <div class="form" id="paneSched">
+      <div class="list" id="schedList"></div>
+      <h4 style="margin:6px 0 0">Add a schedule</h4>
+      <div class="f2">
+        <div class="fld"><label for="sAgent">Agent</label><select id="sAgent"></select></div>
+        <div class="fld"><label for="sTimes">Times (IST, 24h)</label><input type="text" id="sTimes" placeholder="06:00, 13:00, 19:00"></div>
+      </div>
+      <div class="fld"><span class="lbl">Days (none ticked = every day)</span><div class="days" id="sDays"></div></div>
+      <div class="fld"><label for="sTask">Task (what the agent should do each time)</label><textarea id="sTask" rows="3" placeholder="e.g. Desktop organise karo (option A: sirf screenshots Desktop/Screenshots mein). Log iCloud mein likho."></textarea></div>
+      <div class="btns"><button class="btn pri" id="sSave" type="button">Save schedule</button><span class="msg" id="sMsg"></span></div>
+      <div class="note">Runs only while the Mac mini is on. Sends and deletes still wait for your Haan.</div>
+    </div>
+    <div class="form" id="paneSet" hidden>
+      <h4 style="margin:0">Phone notifications (free ntfy app)</h4>
+      <div class="note">1. Install <b>ntfy</b> on iPhone (App Store). 2. Tap + and subscribe to the topic below. 3. Turn on and press Test. Only a short line like "LinkedIn Desk finished" is sent, never your data.</div>
+      <div class="f2">
+        <div class="fld"><label for="nTopic">Private topic name</label><input type="text" id="nTopic"></div>
+        <div class="fld"><span class="lbl">Status</span><div class="opts"><label><input type="checkbox" id="nOn"> Notifications on</label></div></div>
+      </div>
+      <div class="btns"><button class="btn pri" id="nSave" type="button">Save</button><button class="btn" id="nTest" type="button">Send test</button><span class="msg" id="nMsg"></span></div>
+      <h4 style="margin:10px 0 0">Mac folders agents may use</h4>
+      <div class="list" id="folderList"></div>
+      <div class="f2">
+        <div class="fld"><label for="fPath">Add folder</label><input type="text" id="fPath" placeholder="~/Desktop"></div>
+        <div class="fld" style="align-content:end"><div class="btns"><button class="btn" id="fAdd" type="button">Add folder</button></div></div>
+      </div>
+      <div class="msg" id="fMsg"></div>
+      <div class="note">If an agent still gets "Operation not permitted": System Settings → Privacy &amp; Security → Full Disk Access → add node.</div>
+    </div>
+  </div>
+</div>
+
 <script>
 const $ = id => document.getElementById(id);
 const COLORS = ['#24427a','#c46a12','#1f8a5b','#6b4fb3','#b8323f','#0a66c2','#8a6d1f','#2f7f86'];
@@ -213,13 +261,15 @@ async function loadAgents() {
     const b = el('button', 'agent' + (a.id === cur ? ' on' : ''));
     const av = el('span', 'av', a.name[0].toUpperCase()); av.style.background = colorOf(a.id);
     const t = el('span'); t.append(el('b', null, a.name), el('small', null, a.description));
-    b.append(av, t, a.paused && !busyAgents.has(a.id) ? el('span', 'pill warn', 'Paused') : el('span', 'live' + (busyAgents.has(a.id) || a.busy ? ' busy' : '')));
+    b.append(av, t, a.unread && a.id !== cur ? el('span', 'bell', '🔔') : a.paused && !busyAgents.has(a.id) ? el('span', 'pill warn', 'Paused') : el('span', 'live' + (busyAgents.has(a.id) || a.busy ? ' busy' : '')));
     b.onclick = () => { if (cur === a.id) return; cur = a.id; attached = []; showFiles(); try { localStorage.setItem('agent', cur); } catch {} loadAgents(); };
     side.append(b);
   }
   const add = el('button', 'agent'); add.style.color = 'var(--accent)';
   const av = el('span', 'av', '+'); av.style.cssText = 'background:transparent;color:var(--accent);border:1px dashed var(--accent)';
   add.append(av, el('b', null, 'New agent')); add.onclick = openAdd; side.append(add);
+  const au = el('button', 'agent'); const av2 = el('span', 'av', '⏰'); av2.style.cssText = 'background:transparent;border:1px dashed var(--line)';
+  au.append(av2, el('b', null, 'Schedules')); au.onclick = openAuto; side.append(au);
   showHeader(); loadChat();
 }
 function showHeader() {
@@ -234,6 +284,7 @@ async function loadChat(pre) {
   const d = pre || await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json();
   serverBusy = !!d.busy && !busyAgents.has(cur);
   shown = { agent: cur, count: d.messages.length, pending: (d.pending || []).length, busy: !!d.busy };
+  fetch('/api/seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: cur }) }).catch(() => {});
   const m = $('msgs'); m.replaceChildren();
   if (!d.messages.length) {
     const e = el('div', 'empty'); e.append(el('b', null, 'Namaste Kapil ji'), el('span', null, 'Type a message or tap a suggestion below. Every send or delete waits for your Haan.'));
@@ -301,7 +352,8 @@ async function loadAgentsQuiet() {
   document.querySelectorAll('#side .agent').forEach((b, i) => {
     const a = list[i]; if (!a) return; const dot = b.lastChild;
     const working = busyAgents.has(a.id) || a.busy;
-    if (working) { const n = el('span', 'live busy'); b.replaceChild(n, dot); }
+    if (a.unread && a.id !== cur && !working) { b.replaceChild(el('span', 'bell', '🔔'), dot); }
+    else if (working) { const n = el('span', 'live busy'); b.replaceChild(n, dot); }
     else if (a.paused) { b.replaceChild(el('span', 'pill warn', 'Paused'), dot); }
     else { b.replaceChild(el('span', 'live'), dot); }
   });
@@ -389,7 +441,7 @@ $('save').onclick = async () => {
 };
 // Auto-refresh: shows messages typed on the other device (Mac mini / iPhone / MacBook)
 async function poll() {
-  if (document.hidden || busyAgents.has(cur) || !$('overlay').hidden) return;
+  if (document.hidden || busyAgents.has(cur) || !$('overlay').hidden || !$('auto').hidden) return;
   try {
     const d = await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json();
     if (shown.agent !== cur) return;
@@ -398,6 +450,56 @@ async function poll() {
   } catch {}
 }
 setInterval(poll, 4000);
+
+// ---------- Automation: schedules + settings ----------
+const DAYN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const post = (u, b) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Failed'); return d; });
+function daysText(d) { if (!d || !d.length || d.length === 7) return 'Every day'; if (d.join() === '1,2,3,4,5') return 'Mon–Fri'; return d.map(x => DAYN[x]).join(' '); }
+async function loadSched() {
+  const list = await (await fetch('/api/schedules')).json();
+  const box = $('schedList'); box.replaceChildren(); const pan = $('schedPanel'); pan.replaceChildren();
+  if (!list.length) { box.append(el('div', 'note', 'No schedules yet. Add one below.')); pan.append(el('div', 'note', 'None yet')); }
+  for (const s of list) {
+    const a = agents.find(x => x.id === s.agent); const nm = a ? a.name : s.agent;
+    const it = el('div', 'item' + (s.enabled ? '' : ' off'));
+    const top = el('div', 'top'); top.append(el('b', null, nm), el('span', 'meta', s.times.join(', ') + ' · ' + daysText(s.days) + (s.enabled ? '' : ' · OFF')));
+    it.append(top, el('div', 'task', s.task));
+    const btns = el('div', 'btns');
+    const run = el('button', 'btn', 'Run now'); run.onclick = () => post('/api/schedules', { action: 'run', id: s.id }).then(() => { run.textContent = 'Started ✓'; }).catch(e => { run.textContent = e.message; });
+    const tg = el('button', 'btn', s.enabled ? 'Pause' : 'Turn on'); tg.onclick = () => post('/api/schedules', { action: 'toggle', id: s.id }).then(loadSched);
+    let armed = false; const del = el('button', 'btn', 'Delete'); del.onclick = () => { if (!armed) { armed = true; del.textContent = 'Sure? Tap again'; return; } post('/api/schedules', { action: 'delete', id: s.id }).then(loadSched); };
+    btns.append(run, tg, del); it.append(btns); box.append(it);
+    if (s.enabled) { const r = el('div', 'sched'); r.append(el('span', null, nm), el('span', null, s.times.join(' '))); pan.append(r); }
+  }
+}
+function openAuto() {
+  $('sAgent').replaceChildren(...agents.map(a => new Option(a.name, a.id))); $('sAgent').value = cur;
+  const dd = $('sDays'); dd.replaceChildren(); DAYN.forEach((n, i) => { const l = el('label'); const c = el('input'); c.type = 'checkbox'; c.value = i; l.append(c, document.createTextNode(' ' + n)); dd.append(l); });
+  $('sMsg').textContent = ''; loadSched(); loadSettings(); $('auto').hidden = false;
+}
+$('openAuto2').onclick = openAuto; $('closeAuto').onclick = () => { $('auto').hidden = true; };
+$('tabSched').onclick = () => { $('tabSched').classList.add('on'); $('tabSet').classList.remove('on'); $('paneSched').hidden = false; $('paneSet').hidden = true; };
+$('tabSet').onclick = () => { $('tabSet').classList.add('on'); $('tabSched').classList.remove('on'); $('paneSet').hidden = false; $('paneSched').hidden = true; };
+$('sSave').onclick = async () => {
+  try {
+    await post('/api/schedules', { agent: $('sAgent').value, times: $('sTimes').value, task: $('sTask').value, days: [...$('sDays').querySelectorAll('input:checked')].map(i => Number(i.value)) });
+    $('sMsg').textContent = 'Saved ✓'; $('sTimes').value = ''; $('sTask').value = ''; loadSched();
+  } catch (e) { $('sMsg').textContent = e.message; }
+};
+async function loadSettings() {
+  const s = await (await fetch('/api/settings')).json();
+  $('nTopic').value = s.ntfyTopic || ('toshi-' + Math.random().toString(36).slice(2, 12)); $('nOn').checked = !!s.notify;
+  const fl = $('folderList'); fl.replaceChildren();
+  for (const f of s.folders) {
+    const it = el('div', 'item'); const top = el('div', 'top'); top.append(el('span', 'meta', f));
+    if (!/ToshiAgents$/.test(f)) { const rm = el('button', 'btn', 'Remove'); rm.onclick = () => post('/api/settings', { action: 'removeFolder', path: f }).then(loadSettings).catch(e => { $('fMsg').textContent = e.message; }); top.append(rm); }
+    it.append(top); fl.append(it);
+  }
+}
+$('nSave').onclick = () => post('/api/settings', { action: 'notify', notify: $('nOn').checked, ntfyTopic: $('nTopic').value.trim() }).then(() => { $('nMsg').textContent = 'Saved ✓'; }).catch(e => { $('nMsg').textContent = e.message; });
+$('nTest').onclick = () => post('/api/settings', { action: 'notify', notify: true, ntfyTopic: $('nTopic').value.trim() }).then(() => { $('nOn').checked = true; return post('/api/settings', { action: 'test' }); }).then(() => { $('nMsg').textContent = 'Test sent. Check your iPhone.'; }).catch(e => { $('nMsg').textContent = e.message; });
+$('fAdd').onclick = () => post('/api/settings', { action: 'addFolder', path: $('fPath').value.trim() }).then(() => { $('fPath').value = ''; $('fMsg').textContent = 'Added ✓'; loadSettings(); }).catch(e => { $('fMsg').textContent = e.message; });
+setTimeout(() => loadSched().catch(() => {}), 800); setInterval(() => { if (!document.hidden) loadSched().catch(() => {}); }, 60000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 loadAgents();
 </script>

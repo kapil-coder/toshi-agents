@@ -54,6 +54,7 @@ Home of the app: **iCloud Drive → ToshiAgents → app** (private, synced, back
 - **Auto-start + iPhone/MacBook access (one time):** `~/toshi-agents/scripts/install-autostart.sh`
   - App starts by itself at login and after a power cut; no Terminal window needed.
   - Open on iPhone/MacBook (Tailscale ON): https://kapils-mac-mini.tailac1d46.ts.net
+  - ⏰ Schedules: sidebar → Schedules. ⚙️ Settings: phone notifications (ntfy app) and Mac folders.
   - Log file: `~/.toshi-agents/app.log`. Remove auto-start: `install-autostart.sh --remove`
 
 ## Daily use (Terminal way)
