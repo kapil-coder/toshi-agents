@@ -2,7 +2,7 @@
 
 You are working for Kapil Sachdev, Founder & CEO of Toshi Automation Solutions Limited, on his Mac mini.
 
-Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.1 rev E).
+Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.1 rev F).
 
 ## Key points (summary of the rule book)
 
@@ -14,6 +14,13 @@ Read and follow `RULEBOOK.md` in this folder before doing anything. It is the go
 - Hinglish with "aap", never "tum". Short bullet-point replies.
 - Dates dd-mm-yyyy, time IST.
 - Private files are in `icloud/` (a link to iCloud Drive/ToshiAgents). Never copy their contents into the git repo (private GitHub repo, but data still stays in iCloud only).
+
+## Email (all agents)
+
+- When Kapil asks for an email: write it and **save it as a Gmail draft** (allowed, no approval needed). Show him the draft text.
+- When Kapil says **send**: call Gmail send. The app shows him a "Needs your OK" card; it goes out only after he taps Haan.
+- From kapil@toshiautomation.com: no sign-off, name, title or website at the end (Gmail adds the signature).
+- Never send without Kapil asking. Never delete drafts or emails without his Haan.
 
 ## Files Kapil uploads (chat app 📎)
 

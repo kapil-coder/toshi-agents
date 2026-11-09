@@ -8,7 +8,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.4 rev D';
+const VERSION = 'v0.5 rev B';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -83,7 +83,8 @@ function runClaude(agent, message, opts, onEvent) {
   args.push('--append-system-prompt', tone + ' Today is ' + stamp() + ' IST.');
   args.push('--', message);
 
-  const child = spawn('claude', args, { cwd: PROJECT, env: process.env });
+  // Tools Kapil approved with Haan for this run: the guard hook allows exactly these
+  const child = spawn('claude', args, { cwd: PROJECT, env: { ...process.env, TOSHI_ALLOW: allow.join(' ') } });
   running.set(agent, child);
   let buf = '', finalText = [], sessionId = chat.sessionId, denials = [], errText = '';
   child.stdout.on('data', d => {
@@ -139,6 +140,7 @@ Created ${stamp()} IST from the Toshi Agents app${f.source ? ' (imported from Gr
 1. Read \`RULEBOOK.md\` (golden rule book). It always wins.
 2. If \`icloud/${id}/charter.md\` exists, read it.
 3. Files Kapil uploads in the chat app land in \`icloud/${id}/uploads/\`.
+4. Email: when Kapil asks, write it and save it as a Gmail draft (allowed). Send only when Kapil asks to send; the app then shows him a Haan card.
 
 ## Company
 ${f.company || 'Toshi Automation'}

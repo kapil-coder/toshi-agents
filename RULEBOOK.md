@@ -1,6 +1,6 @@
 # Toshi Agents: Golden Rule Book
 
-Version: v0.1 rev E | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
+Version: v0.1 rev F | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
 
 This rule book applies to every Toshi agent run with Claude Code on the Mac mini.
 Each agent's own charter (kept privately in iCloud) adds detail. If they disagree, the stricter rule wins.
@@ -13,10 +13,12 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Claude Code | 2.1.x (keep updated with `claude update`) |
 | Node.js | Current LTS (needed for the browser tool) |
 | Playwright MCP (browser tool) | 0.0.83 (pinned) |
-| Rule book | v0.1 rev E |
+| Rule book | v0.1 rev F |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
+| Guard hook | v0.2 rev A |
+| Chat app server | v0.5 rev B |
 
 ## 2. Rules for every agent
 
@@ -49,8 +51,8 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Action | Rule |
 |---|---|
 | Read Gmail, Zoho, iCloud files, LinkedIn | Allowed |
-| Create Gmail draft | Allowed |
-| Send, reply or forward email | Ask Kapil (guard hook forces the prompt) |
+| Create or update Gmail draft (any agent, when asked) | Allowed, no prompt |
+| Send, reply or forward email (any agent, when Kapil asks) | "Needs your OK" card; sends only after Haan |
 | Delete or trash any email or draft | Ask Kapil |
 | Zoho Books / Zoho CRM create, edit, delete | Blocked |
 | LinkedIn standing approvals (section 3) | Allowed within limits |
@@ -83,6 +85,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v0.1 rev F | 09-11-2026 | All agents may create/update Gmail drafts when asked; sending works after Haan card (guard hook v0.2). |
 | v0.1 rev E | 09-11-2026 | Auto-start (launchd) and private phone/MacBook access via Tailscale (v0.5 rev A). |
 | v0.1 rev D | 08-11-2026 | Chat app v0.4 rev C: file upload (📎 / drag and drop) for every agent; upload folders added to agent instructions. |
 | v0.1 rev C | 08-11-2026 | Chat app v0.4 rev A added (localhost:3737), same look as the approved mock. |
