@@ -8,7 +8,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.5 rev B';
+const VERSION = 'v0.5 rev C';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -188,7 +188,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/chat') {
       const id = url.searchParams.get('agent') || '';
       if (!validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
-      const c = loadChat(id); return json(res, 200, { messages: c.messages, pending: c.pending || [], allow: c.allow || [] });
+      const c = loadChat(id); return json(res, 200, { messages: c.messages, pending: c.pending || [], allow: c.allow || [], busy: running.has(id) });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const b = await readBody(req);

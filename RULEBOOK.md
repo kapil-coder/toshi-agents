@@ -18,7 +18,7 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
 | Guard hook | v0.2 rev A |
-| Chat app server | v0.5 rev B |
+| Chat app server | v0.5 rev C |
 
 ## 2. Rules for every agent
 

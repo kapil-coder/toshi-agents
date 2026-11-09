@@ -7,7 +7,7 @@
 <title>Toshi Agents</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Agents Chat App v0.4 rev D (08-11-2026). Same look as the approved mock. */
+/* Toshi Agents Chat App v0.5 rev C (09-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -196,7 +196,8 @@ const CHIPS = {
 };
 let agents = [], cur = 'mr-c', tone = 'pro';
 const busyAgents = new Set(); // agents working right now (several can run in parallel)
-const isBusy = () => busyAgents.has(cur);
+let serverBusy = false, shown = { agent: '', count: -1, pending: -1, busy: false };
+const isBusy = () => busyAgents.has(cur) || serverBusy;
 function syncSend() { $('sendBtn').disabled = isBusy(); $('sendBtn').textContent = isBusy() ? '…' : 'Send'; }
 try { tone = localStorage.getItem('tone') || 'pro'; cur = localStorage.getItem('agent') || 'mr-c'; } catch {}
 
@@ -229,8 +230,10 @@ function showHeader() {
   const chips = $('chips'); chips.replaceChildren();
   for (const c of (CHIPS[a.id] || ['Aap kya kar sakte ho?'])) { const b = el('button', 'chip', c); b.type = 'button'; b.onclick = () => send(c); chips.append(b); }
 }
-async function loadChat() {
-  const d = await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json();
+async function loadChat(pre) {
+  const d = pre || await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json();
+  serverBusy = !!d.busy && !busyAgents.has(cur);
+  shown = { agent: cur, count: d.messages.length, pending: (d.pending || []).length, busy: !!d.busy };
   const m = $('msgs'); m.replaceChildren();
   if (!d.messages.length) {
     const e = el('div', 'empty'); e.append(el('b', null, 'Namaste Kapil ji'), el('span', null, 'Type a message or tap a suggestion below. Every send or delete waits for your Haan.'));
@@ -239,7 +242,7 @@ async function loadChat() {
   for (const x of d.messages) addMsg(x.who, x.text, x.at);
   if (d.pending && d.pending.length) addApproval(d.pending);
   $('allowList').textContent = d.allow.length ? d.allow.map(label).join(', ') : 'None yet';
-  if (isBusy()) m.append(el('div', 'tool', 'Still working… the reply appears here when done. You can use other agents meanwhile.'));
+  if (isBusy()) m.append(el('div', 'tool', serverBusy ? 'Working (started on another device)… updates here automatically.' : 'Still working… the reply appears here when done. You can use other agents meanwhile.'));
   syncSend(); scroll();
 }
 function label(t) { const m = String(t).match(/^mcp__(.+?)__(.+)$/); return m ? m[1].replace(/^claude_ai_/, '').replace(/_/g, ' ') + ': ' + m[2].replace(/_/g, ' ') : t; }
@@ -384,6 +387,18 @@ $('save').onclick = async () => {
   if (!r.ok) { $('smsg').textContent = d.error; return; }
   $('smsg').textContent = 'Saved. ' + body.name + ' is in your agent list.'; cur = d.id; setTimeout(() => { $('overlay').hidden = true; loadAgents(); }, 700);
 };
+// Auto-refresh: shows messages typed on the other device (Mac mini / iPhone / MacBook)
+async function poll() {
+  if (document.hidden || busyAgents.has(cur) || !$('overlay').hidden) return;
+  try {
+    const d = await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json();
+    if (shown.agent !== cur) return;
+    if (d.messages.length !== shown.count || (d.pending || []).length !== shown.pending || !!d.busy !== shown.busy) loadChat(d);
+    loadAgentsQuiet();
+  } catch {}
+}
+setInterval(poll, 4000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 loadAgents();
 </script>
 </body>
