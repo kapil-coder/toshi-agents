@@ -79,6 +79,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 2. Doors note: auto-send up to 5 a day (standing approval).
 3. Connects: 9 to 11 per run, 3 times a week (Mon / Wed / Fri).
 4. Kavya's Daily Inbound & RFQ Report: discontinued. Agents no longer look for it.
+5. No cloud computer (09-11-2026): the Mac mini at home is Toshi's only agent computer. Data stays on Kapil's Mac and iCloud.
 
 ## 7. Roadmap
 
