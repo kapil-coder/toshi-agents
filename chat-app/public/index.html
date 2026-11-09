@@ -7,7 +7,7 @@
 <title>Toshi Agents</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Agents Chat App v0.8 rev C (09-11-2026). Same look as the approved mock. */
+/* Toshi Agents Chat App v0.8 rev E (09-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -565,8 +565,9 @@ async function loadSettings() {
   const al = $('agentList'); al.replaceChildren();
   for (const a of agents) {
     const it = el('div', 'item'); const top = el('div', 'top'); top.append(el('b', null, a.name), el('span', 'meta', a.id));
-    if (['mr-c', 'investor-desk', 'linkedin-desk'].includes(a.id)) top.append(el('span', 'meta', '· built-in'));
-    else {
+    const builtIn = ['mr-c', 'investor-desk', 'linkedin-desk'].includes(a.id);
+    if (builtIn) top.append(el('span', 'meta', '· built-in'));
+    {
       const ren = el('button', 'btn', 'Rename');
       ren.onclick = () => {
         const box = el('div', 'btns'); const inp = el('input'); inp.type = 'text'; inp.value = a.name; inp.style.cssText = 'border:1px solid var(--line);border-radius:8px;padding:6px 9px;background:var(--surface)';
@@ -575,12 +576,14 @@ async function loadSettings() {
         box.append(inp, ok); it.append(box); ren.disabled = true; inp.focus();
       };
       top.append(ren);
+      if (!builtIn) {
       let armed = false; const del = el('button', 'btn', 'Delete');
       del.onclick = () => {
         if (!armed) { armed = true; del.textContent = 'Sure? Tap again'; return; }
         post('/api/agents', { action: 'delete', id: a.id }).then(() => { if (cur === a.id) cur = 'mr-c'; return loadAgents(); }).then(loadSettings).catch(e => { del.textContent = e.message; });
       };
       top.append(del);
+      }
     }
     it.append(top); al.append(it);
   }

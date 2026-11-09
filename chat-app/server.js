@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.8 rev D';
+const VERSION = 'v0.8 rev E';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -17,6 +17,8 @@ const AGENTS_DIR = path.join(PROJECT, '.claude', 'agents');
 const ICLOUD = path.join(PROJECT, 'icloud');
 const DATA = fs.existsSync(ICLOUD) ? path.join(ICLOUD, 'chats') : path.join(PROJECT, '.data', 'chats');
 fs.mkdirSync(DATA, { recursive: true });
+const STORE_DIR = () => path.dirname(DATA);
+const readJSON = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
 
 const SEND_RE = /send|reply|forward|trash|delete|spam|share_file|create|update|upsert|post|remove|approve|purchase|merge/i;
 const running = new Map(); // agent -> child process
@@ -32,6 +34,10 @@ execFile('claude', ['--version'], (e, out) => { claudeVersion = e ? 'not found' 
 
 // ---------- agents ----------
 function listAgents() {
+  const names = readJSON(path.join(STORE_DIR(), 'app-settings.json'), {}).names || {};
+  return listAgentsRaw().map(a => names[a.id] ? { ...a, name: names[a.id] } : a);
+}
+function listAgentsRaw() {
   const out = [{ id: 'mr-c', name: 'Mr. C', description: 'Main assistant. Picks the right agent for you.', paused: false }];
   if (!fs.existsSync(AGENTS_DIR)) return out;
   for (const f of fs.readdirSync(AGENTS_DIR).filter(f => f.endsWith('.md')).sort()) {
@@ -88,7 +94,7 @@ function runClaude(agent, message, opts, onEvent) {
   const tone = opts.tone === 'fun'
     ? 'Tone for this chat: Fun, witty and cheeky (Grok style), still accurate and brief. Hinglish with "aap".'
     : 'Tone for this chat: Professional, brief, bullet points. Hinglish with "aap" when talking to Kapil.';
-  args.push('--append-system-prompt', tone + ' Today is ' + stamp() + ' IST.');
+  args.push('--append-system-prompt', tone + ' Your name in the Toshi Agents app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.');
   args.push('--', message);
 
   // Tools Kapil approved with Haan for this run: the guard hook allows exactly these
@@ -190,7 +196,6 @@ const STORE = path.dirname(DATA); // iCloud/ToshiAgents (or .data)
 const SETTINGS_FILE = path.join(STORE, 'app-settings.json');
 const SCHED_FILE = path.join(STORE, 'schedules.json');
 const LOCAL_SETTINGS = path.join(PROJECT, '.claude', 'settings.local.json');
-const readJSON = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
 const writeJSON = (f, o) => fs.writeFileSync(f, JSON.stringify(o, null, 1));
 function getSettings() {
   return Object.assign({ ntfyTopic: '', notify: false, appUrl: 'https://kapils-mac-mini.tailac1d46.ts.net' }, readJSON(SETTINGS_FILE, {}));
@@ -377,14 +382,12 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/agents') {
       const b = await readBody(req);
       if (b.action === 'rename') {
+        // Display name only, saved in iCloud app-settings (works for every agent, survives updates)
         const id = String(b.id || ''), name = String(b.name || '').replace(/[*\n\r]/g, '').trim().slice(0, 40);
-        if (BUILT_IN.has(id)) return json(res, 400, { error: 'Built-in agents keep their names.' });
+        if (!validAgent(id)) return json(res, 404, { error: 'Agent not found.' });
         if (!name) return json(res, 400, { error: 'Write the new name.' });
-        const file = path.join(AGENTS_DIR, id.replace(/[^a-z0-9-]/gi, '') + '.md');
-        if (!fs.existsSync(file)) return json(res, 404, { error: 'Agent not found.' });
-        let t = fs.readFileSync(file, 'utf8');
-        t = /You are \*\*.+?\*\*/.test(t) ? t.replace(/You are \*\*.+?\*\*/, 'You are **' + name + '**') : t.replace(/^(---\n[\s\S]*?\n---\n)/, '$1\nYou are **' + name + '**.\n');
-        fs.writeFileSync(file, t); return json(res, 200, { ok: true });
+        const st = getSettings(); st.names = st.names || {}; st.names[id] = name; writeJSON(SETTINGS_FILE, st);
+        return json(res, 200, { ok: true });
       }
       if (b.action === 'delete') {
         // Archive, never hard-delete. Built-in agents (in GitHub) and Mr. C cannot be removed here.
