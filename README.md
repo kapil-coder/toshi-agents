@@ -84,7 +84,7 @@ When Claude asks permission for a send, reply or delete, that prompt **is** your
 | Component | Version |
 |---|---|
 | Rule book | v0.1 rev A |
-| Guard hook | v0.3 rev A |
+| Guard hook | v0.4 rev A |
 | Setup script | v0.1 rev B |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |

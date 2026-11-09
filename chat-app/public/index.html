@@ -8,7 +8,7 @@
 <title>Toshi Bot</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v0.9 rev E (10-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.0 rev A (10-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -256,6 +256,10 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
         <div class="fld"><span class="lbl">Status</span><div class="opts"><label><input type="checkbox" id="nOn"> Notifications on</label></div></div>
       </div>
       <div class="btns"><button class="btn pri" id="nSave" type="button">Save</button><button class="btn" id="nTest" type="button">Send test</button><span class="msg" id="nMsg"></span></div>
+      <h4 style="margin:10px 0 0">✉️ Auto-send</h4>
+      <div class="opts"><label><input type="checkbox" id="autoSend"> Bots send email / WhatsApp directly when asked (no Haan card)</label></div>
+      <div class="note">Turn OFF here any time = emergency stop for all bots. Deletes, file shares and payments still ask. Zoho stays read-only.</div>
+      <div class="list" id="sendList"></div>
       <h4 style="margin:10px 0 0">📊 Usage</h4>
       <div id="usageBox"><div class="note">Loading…</div></div>
       <div class="note">Your Max plan covers this: no extra money. "API value" shows what the same work would cost on pay-per-use, so you can see which bot works most. Plan limits: claude.ai → Settings → Usage.</div>
@@ -628,6 +632,13 @@ async function loadSettings() {
   loadUsage().catch(() => { $('usageBox').textContent = 'Usage not available.'; });
   const s = await (await fetch('/api/settings')).json();
   $('showBrowser').checked = !!s.showBrowser;
+  $('autoSend').checked = s.autoSend !== false;
+  fetch('/api/sends').then(r => r.json()).then(list => {
+    const box = $('sendList'); box.replaceChildren();
+    if (!list.length) { box.append(el('div', 'note', 'Recent sends: none yet.')); return; }
+    box.append(el('div', 'note', 'Recent sends:'));
+    for (const r of list.slice(0, 10)) { const it = el('div', 'item'); const tp = el('div', 'top'); tp.append(el('b', null, r.name), el('span', 'meta', r.t + ' · ' + r.tool + (r.to ? ' → ' + r.to : '') + (r.auto ? '' : ' · with Haan'))); it.append(tp); box.append(it); }
+  }).catch(() => {});
   $('nTopic').value = s.ntfyTopic || ('toshi-' + Math.random().toString(36).slice(2, 12)); $('nOn').checked = !!s.notify;
   const al = $('agentList'); al.replaceChildren();
   for (const a of agents) {
@@ -637,6 +648,9 @@ async function loadSettings() {
     const ms = el('select'); ms.style.cssText = 'border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:var(--surface);font-size:12px';
     for (const [v, t] of [['', 'Model: default'], ['opus', 'Opus (smartest)'], ['sonnet', 'Sonnet (saves limits)'], ['haiku', 'Haiku (lightest)']]) ms.add(new Option(t, v));
     ms.value = (s.models || {})[a.id] || '';
+    const asl = el('label'); asl.style.cssText = 'display:flex;gap:4px;align-items:center;font-size:12px'; const asc = el('input'); asc.type = 'checkbox';
+    asc.checked = !(s.autoSendOff || {})[a.id]; asc.onchange = () => post('/api/settings', { action: 'autoSendBot', id: a.id, on: asc.checked }).catch(() => {});
+    asl.append(asc, document.createTextNode('Auto-send')); top.append(asl);
     ms.onchange = () => post('/api/settings', { action: 'model', id: a.id, model: ms.value }).catch(e => { alertBox(e.message); });
     top.append(ms);
     {
@@ -666,6 +680,7 @@ async function loadSettings() {
     it.append(top); fl.append(it);
   }
 }
+$('autoSend').onchange = () => post('/api/settings', { action: 'autoSend', on: $('autoSend').checked }).catch(() => {});
 $('showBrowser').onchange = () => post('/api/settings', { action: 'showBrowser', on: $('showBrowser').checked }).catch(() => {});
 $('nSave').onclick = () => post('/api/settings', { action: 'notify', notify: $('nOn').checked, ntfyTopic: $('nTopic').value.trim() }).then(() => { $('nMsg').textContent = 'Saved ✓'; }).catch(e => { $('nMsg').textContent = e.message; });
 $('nTest').onclick = () => post('/api/settings', { action: 'notify', notify: true, ntfyTopic: $('nTopic').value.trim() }).then(() => { $('nOn').checked = true; return post('/api/settings', { action: 'test' }); }).then(() => { $('nMsg').textContent = 'Test sent. Check your iPhone.'; }).catch(e => { $('nMsg').textContent = e.message; });

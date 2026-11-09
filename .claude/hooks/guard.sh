@@ -1,5 +1,6 @@
 #!/bin/bash
-# Toshi Agents guard hook v0.3 rev A (09-11-2026)
+# Toshi Bot guard hook v0.4 rev A (10-11-2026)
+# v0.4: TOSHI_AUTOSEND=1 (Kapil's decision 10-11-2026) lets bots send email/WhatsApp/replies without the Haan card.
 # Runs before every MCP tool call (PreToolUse).
 #  1. Zoho Books / Zoho CRM writes: always BLOCKED (rule book: read-only).
 #  2. Tools Kapil approved with "Haan" in the chat app (env TOSHI_ALLOW): allowed.
@@ -29,6 +30,14 @@ esac
 for a in $TOSHI_ALLOW; do
   [ "$a" = "$tool" ] && decide allow "Approved by Kapil (Haan): $tool"
 done
+
+# 2a. Auto-send ON for this bot: sends go out directly (deletes, trash, spam, file shares still ask)
+if [ "$TOSHI_AUTOSEND" = "1" ]; then
+  if printf '%s' "$t" | grep -Eq 'send|reply|forward' && ! printf '%s' "$t" | grep -Eq 'trash|delete|spam|share_file'; then
+    decide allow "Auto-send ON (Kapil 10-11-2026): $tool"
+  fi
+  case "$t" in *playwright__*) exit 0;; esac
+fi
 
 # 2b. WhatsApp-type agents (TOSHI_STRICT_SEND=1): a browser "send" (Enter, submit, Send button) needs Kapil's Haan
 if [ "$TOSHI_STRICT_SEND" = "1" ]; then

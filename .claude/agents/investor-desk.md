@@ -34,7 +34,7 @@ Do not start with fresh market research.
 - Follow the charter's identity rules, excluded names and confidentiality rules exactly.
 - Never reveal private negotiation coaching in any investor-facing text.
 - Zoho Books and CRM: read-only.
-- External email or WhatsApp: draft only. Kapil reviews and sends.
+- External email or WhatsApp: send when Kapil asks (auto-send, decision 10-11-2026). Without his request, prepare drafts only.
 - Save outputs only in `icloud/investor-desk/` with dd-mm-yyyy in the file name.
 - Never put charter content, figures or names into the git repo.
 

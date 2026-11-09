@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.9 rev E';
+const VERSION = 'v1.0 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -102,7 +102,8 @@ function runClaude(agent, message, opts, onEvent) {
   // Tools Kapil approved with Haan for this run: the guard hook allows exactly these
   // Own browser per agent (LinkedIn Desk and Mr. C keep the shared profile with the LinkedIn login)
   const env = { ...process.env, TOSHI_ALLOW: allow.join(' '), TOSHI_AGENT: agent, TOSHI_HOP: String(opts.hop || 0),
-    TOSHI_PORT: String(PORT), TOSHI_SHOW_BROWSER: getSettings().showBrowser ? '1' : '', TOSHI_STRICT_SEND: STRICT_SEND_RE.test(agent + ' ' + agentName(agent)) ? '1' : '' };
+    TOSHI_PORT: String(PORT), TOSHI_SHOW_BROWSER: getSettings().showBrowser ? '1' : '', TOSHI_STRICT_SEND: STRICT_SEND_RE.test(agent + ' ' + agentName(agent)) ? '1' : '',
+    TOSHI_AUTOSEND: autoSendOn(agent) ? '1' : '' };
   if (!SHARED_BROWSER.has(agent)) {
     env.TOSHI_BROWSER_PROFILE = path.join(os.homedir(), '.toshi-agents', 'chrome-profiles', agent);
     env.TOSHI_BROWSER_OUTPUT = path.join(os.homedir(), '.toshi-agents', 'browser-output', agent);
@@ -121,7 +122,7 @@ function runClaude(agent, message, opts, onEvent) {
       if (ev.type === 'assistant' && ev.message && Array.isArray(ev.message.content)) {
         for (const c of ev.message.content) {
           if (c.type === 'text' && c.text.trim()) { finalText.push(c.text); onEvent({ t: 'text', v: c.text }); }
-          if (c.type === 'tool_use') onEvent({ t: 'tool', v: toolLabel(c.name) });
+          if (c.type === 'tool_use') { onEvent({ t: 'tool', v: toolLabel(c.name) }); if (isSendCall(agent, c.name, c.input)) logSend(agent, c.name, c.input); }
         }
       }
       if (ev.type === 'result') {
@@ -390,6 +391,33 @@ function usageSummary() {
   };
 }
 
+
+// ---------- auto-send (v1.0, Kapil's decision 10-11-2026) ----------
+// All bots send email / WhatsApp / replies directly when Kapil asks or the task needs it. No Haan card, no daily limit.
+// Still asked: deletes, trash, spam marks, file shares, Apollo writes. Zoho stays read-only. Master switch + per-bot switch in Settings.
+function autoSendOn(agent) { const s = getSettings(); return s.autoSend !== false && !(s.autoSendOff || {})[agent]; }
+function isSendCall(agent, name, input) {
+  const t = String(name).toLowerCase(), inp = JSON.stringify(input || {});
+  if (/send|reply|forward/.test(t) && !/draft/.test(t)) return true;
+  if (STRICT_SEND_RE.test(agent + ' ' + agentName(agent))) {
+    if (/browser_press_key/.test(t) && /"key"\s*:\s*"(enter|numpadenter)"/i.test(inp)) return true;
+    if (/browser_type|browser_fill_form/.test(t) && /"submit"\s*:\s*true/i.test(inp)) return true;
+    if (/browser_click/.test(t) && /"element"\s*:\s*"[^"]*send/i.test(inp)) return true;
+  }
+  return false;
+}
+const SENDS_FILE = path.join(path.dirname(DATA), 'sends.jsonl');
+function logSend(agent, name, input) {
+  const i = input || {};
+  const to = [i.to, i.recipient, i.recipients, i.element].flat().filter(Boolean).join(', ').slice(0, 120);
+  const row = { t: stamp(), agent, name: agentName(agent), tool: toolLabel(name), to, auto: autoSendOn(agent) };
+  try { fs.appendFileSync(SENDS_FILE, JSON.stringify(row) + '\n'); } catch {}
+  if (row.auto) notify('Toshi Bot: ' + row.name + ' sent a message', row.tool + '. Details in Settings > Recent sends.');
+}
+function recentSends(n = 30) {
+  try { return fs.readFileSync(SENDS_FILE, 'utf8').split('\n').filter(Boolean).slice(-n).reverse().map(l => JSON.parse(l)); } catch { return []; }
+}
+
 // ---------- server ----------
 const PUBLIC = path.join(__dirname, 'public');
 const server = http.createServer(async (req, res) => {
@@ -545,6 +573,7 @@ const server = http.createServer(async (req, res) => {
       });
     }
     if (req.method === 'GET' && url.pathname === '/api/usage') return json(res, 200, usageSummary());
+    if (req.method === 'GET' && url.pathname === '/api/sends') return json(res, 200, recentSends());
     if (req.method === 'POST' && url.pathname === '/api/seen') {
       const b = await readBody(req); if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });
       const c = loadChat(b.agent); if (c.unread) { delete c.unread; saveChat(b.agent, c); } return json(res, 200, { ok: true });
@@ -583,6 +612,12 @@ const server = http.createServer(async (req, res) => {
           if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });
           const m = String(b.model || ''); if (m && !['opus', 'sonnet', 'haiku'].includes(m)) return json(res, 400, { error: 'Unknown model.' });
           s.models = s.models || {}; if (m) s.models[b.id] = m; else delete s.models[b.id]; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
+        }
+        if (b.action === 'autoSend') { s.autoSend = !!b.on; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
+        if (b.action === 'autoSendBot') {
+          if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });
+          s.autoSendOff = s.autoSendOff || {}; if (b.on) delete s.autoSendOff[b.id]; else s.autoSendOff[b.id] = true;
+          writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
         }
         if (b.action === 'showBrowser') { s.showBrowser = !!b.on; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'test') { notify('Toshi Bot test', 'Notifications are working. ' + stamp() + ' IST'); return json(res, 200, { ok: true }); }
