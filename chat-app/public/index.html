@@ -7,7 +7,7 @@
 <title>Toshi Agents</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Agents Chat App v0.8 rev B (09-11-2026). Same look as the approved mock. */
+/* Toshi Agents Chat App v0.8 rev C (09-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -224,8 +224,8 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 
 <div class="overlay" id="auto" hidden>
   <div class="sheet" role="dialog" aria-label="Automation">
-    <header><b>Automation</b><button class="ghost" id="closeAuto">Close</button></header>
-    <div class="tabs"><button class="on" id="tabSched" type="button">⏰ Schedules</button><button id="tabSet" type="button">⚙️ Settings</button></div>
+    <header><b>⚙️ Settings</b><button class="ghost" id="closeAuto">Close</button></header>
+    <div class="tabs"><button id="tabSet" type="button">General (agents, update, alerts)</button><button class="on" id="tabSched" type="button">⏰ Schedules</button></div>
     <div class="form" id="paneSched">
       <div class="list" id="schedList"></div>
       <h4 style="margin:6px 0 0">Add a schedule</h4>
@@ -295,8 +295,8 @@ async function loadAgents() {
   const add = el('button', 'agent'); add.style.color = 'var(--accent)';
   const av = el('span', 'av', '+'); av.style.cssText = 'background:transparent;color:var(--accent);border:1px dashed var(--accent)';
   add.append(av, el('b', null, 'New agent')); add.onclick = openAdd; side.append(add);
-  const au = el('button', 'agent'); const av2 = el('span', 'av', '⏰'); av2.style.cssText = 'background:transparent;border:1px dashed var(--line)';
-  au.append(av2, el('b', null, 'Schedules')); au.onclick = openAuto; side.append(au);
+  const au = el('button', 'agent'); const av2 = el('span', 'av', '⚙️'); av2.style.cssText = 'background:transparent;border:1px dashed var(--line)';
+  au.append(av2, el('b', null, 'Settings')); au.onclick = () => openAuto('set'); side.append(au);
   showHeader(); loadChat();
 }
 function showHeader() {
@@ -544,12 +544,13 @@ async function loadSched() {
     if (s.enabled) { const r = el('div', 'sched'); r.append(el('span', null, nm), el('span', null, s.times.join(' '))); pan.append(r); }
   }
 }
-function openAuto() {
+function openAuto(tab) {
   $('sAgent').replaceChildren(...agents.map(a => new Option(a.name, a.id))); $('sAgent').value = cur;
   const dd = $('sDays'); dd.replaceChildren(); DAYN.forEach((n, i) => { const l = el('label'); const c = el('input'); c.type = 'checkbox'; c.value = i; l.append(c, document.createTextNode(' ' + n)); dd.append(l); });
   $('sMsg').textContent = ''; loadSched(); loadSettings(); $('auto').hidden = false;
+  (tab === 'set' ? $('tabSet') : $('tabSched')).click();
 }
-$('openAuto2').onclick = openAuto; $('closeAuto').onclick = () => { $('auto').hidden = true; };
+$('openAuto2').onclick = () => openAuto('sched'); $('closeAuto').onclick = () => { $('auto').hidden = true; };
 $('tabSched').onclick = () => { $('tabSched').classList.add('on'); $('tabSet').classList.remove('on'); $('paneSched').hidden = false; $('paneSet').hidden = true; };
 $('tabSet').onclick = () => { $('tabSet').classList.add('on'); $('tabSched').classList.remove('on'); $('paneSet').hidden = false; $('paneSched').hidden = true; };
 $('sSave').onclick = async () => {
