@@ -8,7 +8,7 @@
 <title>Toshi Bot</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v0.9 rev B (09-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v0.9 rev C (09-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -252,6 +252,9 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
         <div class="fld"><span class="lbl">Status</span><div class="opts"><label><input type="checkbox" id="nOn"> Notifications on</label></div></div>
       </div>
       <div class="btns"><button class="btn pri" id="nSave" type="button">Save</button><button class="btn" id="nTest" type="button">Send test</button><span class="msg" id="nMsg"></span></div>
+      <h4 style="margin:10px 0 0">📊 Usage</h4>
+      <div id="usageBox"><div class="note">Loading…</div></div>
+      <div class="note">Your Max plan covers this: no extra money. "API value" shows what the same work would cost on pay-per-use, so you can see which bot works most. Plan limits: claude.ai → Settings → Usage.</div>
       <h4 style="margin:10px 0 0">My agents</h4>
       <div class="list" id="agentList"></div>
       <div class="note">Delete moves the agent to an archive folder (not lost). Its chat history stays in iCloud. Built-in agents can't be deleted.</div>
@@ -564,7 +567,28 @@ $('sSave').onclick = async () => {
     $('sMsg').textContent = 'Saved ✓'; $('sTimes').value = ''; $('sTask').value = ''; loadSched();
   } catch (e) { $('sMsg').textContent = e.message; }
 };
+async function loadUsage() {
+  const u = await (await fetch('/api/usage')).json(); const box = $('usageBox'); box.replaceChildren();
+  const tiles = el('div', 'f2');
+  for (const [lbl, v] of [['Today', u.today], ['This month', u.month]]) {
+    const it = el('div', 'item'); it.append(el('span', 'meta', lbl), el('b', null, v.runs + ' runs · API value $' + v.usd.toFixed(2)), el('span', 'meta', (v.tokens / 1000).toFixed(0) + 'k tokens · ' + v.turns + ' steps'));
+    tiles.append(it);
+  }
+  box.append(tiles);
+  if (!u.agents.length) { box.append(el('div', 'note', 'No runs counted yet. Counting started with v0.9 rev C.')); return; }
+  const tw = el('div'); tw.style.cssText = 'overflow-x:auto;margin-top:8px';
+  const t = el('table'); t.style.cssText = 'width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums';
+  const hr = el('tr'); for (const h of ['Bot', 'Today', 'Month runs', 'Chat / Sched / Handoff', 'API value']) { const th = el('th', null, h); th.style.cssText = 'text-align:left;padding:6px;border-bottom:1px solid var(--line);font:600 10.5px var(--f-mono);color:var(--muted);text-transform:uppercase'; hr.append(th); } t.append(hr);
+  for (const a of u.agents) {
+    const tr = el('tr'); const k = a.kinds;
+    for (const v of [a.name, a.today, a.runs, (k.chat || 0) + ' / ' + (k.schedule || 0) + ' / ' + (k.handoff || 0), '$' + a.usd.toFixed(2)]) { const td = el('td', null, String(v)); td.style.cssText = 'padding:6px;border-bottom:1px solid var(--line)'; tr.append(td); }
+    t.append(tr);
+  }
+  tw.append(t); box.append(tw);
+  if (u.since) box.append(el('div', 'note', 'Counting since ' + u.since + ' IST'));
+}
 async function loadSettings() {
+  loadUsage().catch(() => { $('usageBox').textContent = 'Usage not available.'; });
   const s = await (await fetch('/api/settings')).json();
   $('showBrowser').checked = !!s.showBrowser;
   $('nTopic').value = s.ntfyTopic || ('toshi-' + Math.random().toString(36).slice(2, 12)); $('nOn').checked = !!s.notify;

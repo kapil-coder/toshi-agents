@@ -1,6 +1,6 @@
 # Toshi Bot: Golden Rule Book
 
-Version: v0.3 rev D | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
+Version: v0.3 rev E | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
 
 This rule book applies to every Toshi Bot agent run with Claude Code on the Mac mini. (Product renamed from "Toshi Agents" to "Toshi Bot" on 09-11-2026; folder and repo names stay toshi-agents.)
 Each agent's own charter (kept privately in iCloud) adds detail. If they disagree, the stricter rule wins.
@@ -13,12 +13,12 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Claude Code | 2.1.x (keep updated with `claude update`) |
 | Node.js | Current LTS (needed for the browser tool) |
 | Playwright MCP (browser tool) | 0.0.83 (pinned), connects to each bot's hidden Chrome via scripts/browser-mcp.sh v0.9 rev B |
-| Rule book | v0.3 rev D |
+| Rule book | v0.3 rev E |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
 | Guard hook | v0.3 rev A |
-| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update) | v0.9 rev B |
+| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter) | v0.9 rev C |
 
 ## 2. Rules for every agent
 
@@ -101,6 +101,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v0.3 rev E | 09-11-2026 | v0.9 rev C: usage meter (runs and API value per bot) in Settings; alert at 40 runs/day per bot. Max plan = no extra cost. |
 | v0.3 rev D | 09-11-2026 | v0.9 rev B: each bot works silently in its own hidden Chrome; 🔴 Live shows the bot's own browser. |
 | v0.3 rev C | 09-11-2026 | Product renamed to Toshi Bot (app v0.9 rev A). |
 | v0.3 rev B | 09-11-2026 | Rule 14: rule book, CLAUDE.md, settings and guard hook locked against agent edits. Local Diwali Bot exception (agent-made) not kept. |

@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.9 rev B';
+const VERSION = 'v0.9 rev C';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -125,6 +125,7 @@ function runClaude(agent, message, opts, onEvent) {
       if (ev.type === 'result') {
         denials = (ev.permission_denials || []).map(d => ({ tool: d.tool_name, label: toolLabel(d.tool_name), input: JSON.stringify(d.tool_input || {}).slice(0, 400) }));
         if (ev.is_error && ev.result) errText = String(ev.result);
+        recordUsage(agent, opts.kind || 'chat', ev);
       }
     }
   });
@@ -228,6 +229,7 @@ function startRun(agent, text, opts, onEvent, meta = {}) {
   if (opts.always && Array.isArray(opts.allowOnce)) c.allow = [...new Set([...(c.allow || []), ...opts.allowOnce.filter(t => !SEND_RE.test(t))])];
   c.messages.push({ who: 'me', text: meta.label ? meta.label + '\n' + text : text, at: stamp() }); delete c.pending; saveChat(agent, c);
   const what = meta.handoff ? 'Task from ' + meta.from : 'Scheduled task ' + meta.time;
+  opts.kind = meta.handoff ? 'handoff' : meta.scheduled ? 'schedule' : 'chat';
   return runClaude(agent, text, opts, ev => {
     onEvent(ev);
     if (meta.scheduled && ev.t === 'approve') notify('Toshi Bot: ' + agentName(agent) + ' needs your Haan', what + ' is waiting for your approval.');
@@ -353,6 +355,37 @@ function captureAgentBrowser(agent, cb) {
     });
   }).on('error', () => done({ buf: null, err: "The bot's browser is not running. It starts when the bot uses the browser." }))
     .on('timeout', function () { this.destroy(); });
+}
+
+
+// ---------- usage meter (v0.9 rev C) ----------
+// One line per run in iCloud/ToshiAgents/usage.jsonl. "API value" = what the run would cost on the pay-per-use API;
+// on the Max plan Kapil pays nothing extra, it only counts toward the plan's usage limits.
+const USAGE_FILE = path.join(path.dirname(DATA), 'usage.jsonl');
+const alerted = new Set();
+function recordUsage(agent, kind, ev) {
+  const u = ev.usage || {};
+  const row = { d: nowIST().date, t: stamp(), agent, kind, usd: Number(ev.total_cost_usd) || 0, turns: Number(ev.num_turns) || 0,
+    ms: Number(ev.duration_ms) || 0, inTok: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0), outTok: u.output_tokens || 0 };
+  try { fs.appendFileSync(USAGE_FILE, JSON.stringify(row) + '\n'); } catch {}
+  const today = readUsage().filter(r => r.d === row.d && r.agent === agent).length;
+  const key = row.d + agent;
+  if (today >= 40 && !alerted.has(key)) { alerted.add(key); notify('Toshi Bot: ' + agentName(agent) + ' is busy', today + ' runs today. Check its schedules if this is unexpected.'); }
+}
+function readUsage() {
+  try { return fs.readFileSync(USAGE_FILE, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); } catch { return []; }
+}
+function usageSummary() {
+  const rows = readUsage(), today = nowIST().date, month = today.slice(0, 7);
+  const sum = list => ({ runs: list.length, usd: +list.reduce((a, r) => a + r.usd, 0).toFixed(2), turns: list.reduce((a, r) => a + r.turns, 0),
+    tokens: list.reduce((a, r) => a + r.inTok + r.outTok, 0) });
+  const per = {};
+  for (const r of rows.filter(r => r.d.startsWith(month))) (per[r.agent] = per[r.agent] || []).push(r);
+  return {
+    since: rows[0] ? rows[0].t : null, today: sum(rows.filter(r => r.d === today)), month: sum(rows.filter(r => r.d.startsWith(month))),
+    agents: Object.entries(per).map(([id, l]) => ({ id, name: agentName(id), ...sum(l), today: l.filter(r => r.d === today).length,
+      kinds: l.reduce((a, r) => (a[r.kind] = (a[r.kind] || 0) + 1, a), {}) })).sort((a, b) => b.usd - a.usd),
+  };
 }
 
 // ---------- server ----------
@@ -509,6 +542,7 @@ const server = http.createServer(async (req, res) => {
         });
       });
     }
+    if (req.method === 'GET' && url.pathname === '/api/usage') return json(res, 200, usageSummary());
     if (req.method === 'POST' && url.pathname === '/api/seen') {
       const b = await readBody(req); if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });
       const c = loadChat(b.agent); if (c.unread) { delete c.unread; saveChat(b.agent, c); } return json(res, 200, { ok: true });
