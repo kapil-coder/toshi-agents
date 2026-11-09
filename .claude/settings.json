@@ -6,7 +6,15 @@
     ],
     "deny": [
       "Bash(sudo:*)",
-      "Bash(rm -rf:*)"
+      "Bash(rm -rf:*)",
+      "Edit(./RULEBOOK.md)",
+      "Write(./RULEBOOK.md)",
+      "Edit(./CLAUDE.md)",
+      "Write(./CLAUDE.md)",
+      "Edit(./.claude/settings.json)",
+      "Write(./.claude/settings.json)",
+      "Edit(./.claude/hooks/**)",
+      "Write(./.claude/hooks/**)"
     ]
   },
   "hooks": {
