@@ -1,6 +1,6 @@
 # Toshi Agents: Golden Rule Book
 
-Version: v0.2 rev D | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
+Version: v0.3 rev A | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
 
 This rule book applies to every Toshi agent run with Claude Code on the Mac mini.
 Each agent's own charter (kept privately in iCloud) adds detail. If they disagree, the stricter rule wins.
@@ -13,12 +13,12 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Claude Code | 2.1.x (keep updated with `claude update`) |
 | Node.js | Current LTS (needed for the browser tool) |
 | Playwright MCP (browser tool) | 0.0.83 (pinned, via scripts/browser-mcp.sh) |
-| Rule book | v0.2 rev D |
+| Rule book | v0.3 rev A |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
-| Guard hook | v0.2 rev A |
-| Chat app (schedules, notifications, folders, watch, per-agent browser) | v0.7 rev A |
+| Guard hook | v0.3 rev A |
+| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen) | v0.8 rev A |
 
 ## 2. Rules for every agent
 
@@ -33,7 +33,7 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 9. **Files:** save only in `iCloud Drive/ToshiAgents/`. Never copy passwords, OTPs or credentials anywhere.
 10. **Browser:** use the agent's own Chrome profile. One tab, reused. Close extra tabs.
 11. **Lean:** no polling, no repeated checks, no research sweeps unless Kapil asks.
-12. **WhatsApp to leads or third parties:** the agent drafts the text, and Kapil sends it from his own regular WhatsApp. Never from WhatsApp Business.
+12. **WhatsApp to leads or third parties:** goes only through the WhatsApp agent (Kapil's regular WhatsApp, logged in on WhatsApp Web on the Mac mini), and only after Kapil's Haan card. Never WhatsApp Business. Keep it to a few messages a day (ban risk).
 13. **Confidential data never goes into GitHub.** Even though kapil-coder/toshi-agents is private, charters, leads, figures and contacts live only in iCloud.
 
 ## 3. Standing approvals (agents may do these without asking each time)
@@ -66,6 +66,12 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 - Phone notification (ntfy app) says only "<agent> finished" or "<agent> needs your Haan". No business data is sent.
 - Agents may use only the folders listed in app → ⚙️ Settings. ~/Library system folders are never allowed.
 
+## 4c. Handoffs between agents (v0.8, decision 09-11-2026)
+
+- Any agent may pass work to another agent (`node chat-app/handoff.js`). Kapil relaxed the old rule so LinkedIn Desk and others can hand WhatsApp work to the WhatsApp agent.
+- Another agent's instruction is never Kapil's approval. Sends still need Kapil's Haan card; the guard hook enforces it for WhatsApp browser sends.
+- Max 3 hops, max 20 handoffs per agent per hour. Every handoff shows in both chats.
+
 ## 5. Agents (v0.1)
 
 | Agent | Job | Status | How to run |
@@ -94,6 +100,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v0.3 rev A | 09-11-2026 | v0.8: handoffs between agents, WhatsApp via WhatsApp agent after Haan (rule 12 relaxed), rename agents, 🖥 Live screen. Guard hook v0.3. |
 | v0.2 rev D | 09-11-2026 | App v0.7 rev C: delete (archive) user-made agents from ⚙️ Settings. |
 | v0.2 rev C | 09-11-2026 | Suggestion buttons removed from chat (app v0.7 rev B). Decision 6: Mac mini always on. |
 | v0.2 rev B | 09-11-2026 | v0.7: own browser profile and working folder per agent; 🖥 Watch Mac screen. |

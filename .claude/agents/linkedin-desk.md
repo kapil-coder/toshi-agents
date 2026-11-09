@@ -46,7 +46,7 @@ Everything else is a draft until Kapil says "Haan".
 - "Catalogue?": same, with `icloud/linkedin-desk/Toshi_Product_Catalogue_2026_Concise.jpg`.
 - Lead shares email: Gmail draft from kapil@toshiautomation.com with both attachments, website and WhatsApp number. No sign-off. Send only after "Haan".
 - Full catalogue: Nikita sends it. Tell Kapil.
-- WhatsApp to a lead: write the text for Kapil to send from his own WhatsApp.
+- WhatsApp to a lead: hand it off to the WhatsApp agent (`node chat-app/handoff.js --list` to find it), with the number and exact text. It sends from Kapil's regular WhatsApp only after his Haan.
 
 ## Morning prospecting (`/prospecting-morning`, weekdays)
 

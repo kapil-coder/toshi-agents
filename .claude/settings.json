@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "mcp__playwright"
+      "mcp__playwright",
+      "Bash(node chat-app/handoff.js:*)"
     ],
     "deny": [
       "Bash(sudo:*)",

@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.7 rev C';
+const VERSION = 'v0.8 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -22,6 +22,7 @@ const SEND_RE = /send|reply|forward|trash|delete|spam|share_file|create|update|u
 const running = new Map(); // agent -> child process
 const SHARED_BROWSER = new Set(['mr-c', 'linkedin-desk']);
 const BUILT_IN = new Set(['mr-c', 'investor-desk', 'linkedin-desk']);
+const STRICT_SEND_RE = /whatsapp|diwali/i; // agents whose browser 'send' clicks need Kapil's Haan
 function tailscaleIp() {
   for (const list of Object.values(os.networkInterfaces())) for (const n of list || []) if (n.family === 'IPv4' && /^100\./.test(n.address)) return n.address;
   return '';
@@ -92,7 +93,8 @@ function runClaude(agent, message, opts, onEvent) {
 
   // Tools Kapil approved with Haan for this run: the guard hook allows exactly these
   // Own browser per agent (LinkedIn Desk and Mr. C keep the shared profile with the LinkedIn login)
-  const env = { ...process.env, TOSHI_ALLOW: allow.join(' '), TOSHI_AGENT: agent };
+  const env = { ...process.env, TOSHI_ALLOW: allow.join(' '), TOSHI_AGENT: agent, TOSHI_HOP: String(opts.hop || 0),
+    TOSHI_PORT: String(PORT), TOSHI_STRICT_SEND: STRICT_SEND_RE.test(agent + ' ' + agentName(agent)) ? '1' : '' };
   if (!SHARED_BROWSER.has(agent)) {
     env.TOSHI_BROWSER_PROFILE = path.join(os.homedir(), '.toshi-agents', 'chrome-profiles', agent);
     env.TOSHI_BROWSER_OUTPUT = path.join(os.homedir(), '.toshi-agents', 'browser-output', agent);
@@ -220,12 +222,14 @@ function startRun(agent, text, opts, onEvent, meta = {}) {
   const c = loadChat(agent);
   if (opts.always && Array.isArray(opts.allowOnce)) c.allow = [...new Set([...(c.allow || []), ...opts.allowOnce.filter(t => !SEND_RE.test(t))])];
   c.messages.push({ who: 'me', text: meta.label ? meta.label + '\n' + text : text, at: stamp() }); delete c.pending; saveChat(agent, c);
+  const what = meta.handoff ? 'Task from ' + meta.from : 'Scheduled task ' + meta.time;
   return runClaude(agent, text, opts, ev => {
     onEvent(ev);
-    if (meta.scheduled && ev.t === 'approve') notify('Toshi: ' + agentName(agent) + ' needs your Haan', 'Scheduled task ' + meta.time + ' is waiting for your approval.');
+    if (meta.scheduled && ev.t === 'approve') notify('Toshi: ' + agentName(agent) + ' needs your Haan', what + ' is waiting for your approval.');
     if (meta.scheduled && ev.t === 'done') {
       const cc = loadChat(agent); cc.unread = true; saveChat(agent, cc);
-      if (!cc.pending) notify('Toshi: ' + agentName(agent) + ' finished', 'Scheduled task ' + meta.time + ' is done. Open the app to see the result.');
+      if (!cc.pending) notify('Toshi: ' + agentName(agent) + ' finished', what + ' is done. Open the app to see the result.');
+      if (meta.handoff) setTimeout(drainHandoffs, 1000);
     }
   });
 }
@@ -260,6 +264,53 @@ function folderOk(p) {
   if ((full + '/').startsWith(lib) && !full.startsWith(path.join(home, 'Library', 'Mobile Documents'))) return { error: 'System folders (~/Library) are not allowed.' };
   if (!fs.existsSync(full) || !fs.statSync(full).isDirectory()) return { error: 'Folder not found: ' + full };
   return { full };
+}
+
+
+// ---------- handoffs between agents (v0.8) ----------
+const handoffQueue = []; // { from, to, msg, hop, at }
+const handoffLog = new Map(); // from -> [timestamps] (rate limit)
+function queueHandoff(from, to, msg, hop) {
+  if (!validAgent(to)) return { error: 'Unknown agent: ' + to + '. Run: node chat-app/handoff.js --list' };
+  if (to === from) return { error: 'An agent cannot hand off to itself.' };
+  if (hop >= 3) return { error: 'Too many hops (max 3). Ask Kapil instead.' };
+  const now = Date.now(), recent = (handoffLog.get(from) || []).filter(t => now - t < 3600e3);
+  if (recent.length >= 20) return { error: 'Rate limit: max 20 handoffs per hour per agent.' };
+  recent.push(now); handoffLog.set(from, recent);
+  handoffQueue.push({ from, to, msg: String(msg).slice(0, 4000), hop, at: stamp() });
+  // note in the sender's chat so Kapil sees who asked whom
+  if (validAgent(from)) { const c = loadChat(from); c.messages.push({ who: 'bot', text: '📨 Sent to ' + agentName(to) + ':\n' + msg, at: stamp() }); saveChat(from, c); }
+  setTimeout(drainHandoffs, 500);
+  return { ok: true, queued: handoffQueue.length };
+}
+function drainHandoffs() {
+  for (let i = 0; i < handoffQueue.length; i++) {
+    const h = handoffQueue[i];
+    if (running.has(h.to)) continue;
+    handoffQueue.splice(i, 1); i--;
+    startRun(h.to, 'Instruction from ' + agentName(h.from) + ' (another Toshi agent, not Kapil). Follow RULEBOOK.md; anything outgoing still needs Kapil\'s Haan.\n\n' + h.msg,
+      { tone: 'pro', allowOnce: [], hop: h.hop + 1 }, () => {}, { scheduled: true, handoff: true, from: agentName(h.from), label: '📨 From ' + agentName(h.from) });
+  }
+}
+setInterval(drainHandoffs, 15000);
+
+// ---------- live screen (v0.8): macOS screencapture, cached ----------
+let screenCache = { at: 0, buf: null, err: '' }, screenBusy = false;
+function captureScreen(cb) {
+  if (Date.now() - screenCache.at < 1500 || screenBusy) return cb(screenCache);
+  if (process.platform !== 'darwin') { screenCache = { at: Date.now(), buf: null, err: 'Live screen works on the Mac mini only.' }; return cb(screenCache); }
+  screenBusy = true; const f = path.join(os.tmpdir(), 'toshi-live.jpg');
+  execFile('/usr/sbin/screencapture', ['-x', '-t', 'jpg', f], e1 => {
+    if (e1) { screenBusy = false; screenCache = { at: Date.now(), buf: null, err: 'Allow Screen Recording for node: System Settings > Privacy & Security > Screen & System Audio Recording.' }; return cb(screenCache); }
+    execFile('/usr/bin/sips', ['-Z', '1400', '-s', 'formatOptions', '60', f], () => {
+      fs.readFile(f, (e2, buf) => {
+        screenBusy = false;
+        // a black/tiny image usually means Screen Recording permission is missing
+        screenCache = e2 || !buf || buf.length < 8000 ? { at: Date.now(), buf: buf || null, err: e2 ? e2.message : 'Screen looks empty. Allow Screen Recording for node (System Settings > Privacy & Security).' } : { at: Date.now(), buf, err: '' };
+        cb(screenCache);
+      });
+    });
+  });
 }
 
 // ---------- server ----------
@@ -325,6 +376,16 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/agents') {
       const b = await readBody(req);
+      if (b.action === 'rename') {
+        const id = String(b.id || ''), name = String(b.name || '').replace(/[*\n\r]/g, '').trim().slice(0, 40);
+        if (BUILT_IN.has(id)) return json(res, 400, { error: 'Built-in agents keep their names.' });
+        if (!name) return json(res, 400, { error: 'Write the new name.' });
+        const file = path.join(AGENTS_DIR, id.replace(/[^a-z0-9-]/gi, '') + '.md');
+        if (!fs.existsSync(file)) return json(res, 404, { error: 'Agent not found.' });
+        let t = fs.readFileSync(file, 'utf8');
+        t = /You are \*\*.+?\*\*/.test(t) ? t.replace(/You are \*\*.+?\*\*/, 'You are **' + name + '**') : t.replace(/^(---\n[\s\S]*?\n---\n)/, '$1\nYou are **' + name + '**.\n');
+        fs.writeFileSync(file, t); return json(res, 200, { ok: true });
+      }
       if (b.action === 'delete') {
         // Archive, never hard-delete. Built-in agents (in GitHub) and Mr. C cannot be removed here.
         const id = String(b.id || '');
@@ -360,6 +421,24 @@ const server = http.createServer(async (req, res) => {
       out.on('finish', () => { if (!tooBig) json(res, 200, { ok: true, path: 'icloud/' + rel + '/' + name, name, size }); });
       out.on('error', e => { if (!tooBig) json(res, 500, { error: e.message }); });
       return;
+    }
+    if (req.method === 'GET' && url.pathname === '/api/screen') {
+      return captureScreen(c => {
+        if (!c.buf) return json(res, 503, { error: c.err || 'No screen' });
+        res.writeHead(200, { 'Content-Type': 'image/jpeg', 'Cache-Control': 'no-store', 'X-Screen-Note': c.err ? 'warn' : 'ok' }); res.end(c.buf);
+      });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/handoff') {
+      // only from this Mac (agents call it through chat-app/handoff.js)
+      const ra = req.socket.remoteAddress || ''; if (!/^(::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(ra)) return json(res, 403, { error: 'Local only' });
+      const b = await readBody(req);
+      if (b.list) return json(res, 200, listAgents().map(a => ({ id: a.id, name: a.name, description: a.description })));
+      const r = queueHandoff(String(b.from || 'mr-c'), String(b.to || ''), String(b.msg || '').trim(), Number(b.hop) || 0);
+      return json(res, r.error ? 400 : 200, r);
+    }
+    if (req.method === 'POST' && url.pathname === '/api/handoff-ui') {
+      const b = await readBody(req); const r = queueHandoff(String(b.from || 'mr-c'), String(b.to || ''), String(b.msg || '').trim(), 0);
+      return json(res, r.error ? 400 : 200, r);
     }
     if (req.method === 'POST' && url.pathname === '/api/seen') {
       const b = await readBody(req); if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });

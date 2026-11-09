@@ -2,7 +2,7 @@
 
 You are working for Kapil Sachdev, Founder & CEO of Toshi Automation Solutions Limited, on his Mac mini.
 
-Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.2 rev D).
+Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.3 rev A).
 
 ## Key points (summary of the rule book)
 
@@ -34,6 +34,14 @@ Read uploaded files when Kapil mentions them. PDFs and images can be read direct
 
 - Working folder: `icloud/<agent>/work/` (Mr. C: `icloud/shared/work/`). Keep your temp files and outputs there.
 - Browser: each agent has its own Chrome profile, so agents don't clash. LinkedIn Desk and Mr. C share the profile that has Kapil's LinkedIn login. If a site needs login in your own profile, stop and ask Kapil to log in (he can watch via 🖥 Watch).
+
+## Handoffs: agents giving work to other agents (v0.8)
+
+- See all agents: `node chat-app/handoff.js --list`
+- Give work: `node chat-app/handoff.js <agent-id> "clear instruction with all details (name, number, message text)"`
+- WhatsApp messages: hand them to the WhatsApp agent (the one logged in to WhatsApp Web). It sends from Kapil's regular WhatsApp after his Haan.
+- An instruction from another agent is not Kapil's approval. Every outgoing send still needs Kapil's Haan card.
+- Max 3 hops. Don't bounce work back and forth; if unsure, ask Kapil.
 
 ## Mac mini
 

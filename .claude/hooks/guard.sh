@@ -1,5 +1,5 @@
 #!/bin/bash
-# Toshi Agents guard hook v0.2 rev A (09-11-2026)
+# Toshi Agents guard hook v0.3 rev A (09-11-2026)
 # Runs before every MCP tool call (PreToolUse).
 #  1. Zoho Books / Zoho CRM writes: always BLOCKED (rule book: read-only).
 #  2. Tools Kapil approved with "Haan" in the chat app (env TOSHI_ALLOW): allowed.
@@ -29,6 +29,18 @@ esac
 for a in $TOSHI_ALLOW; do
   [ "$a" = "$tool" ] && decide allow "Approved by Kapil (Haan): $tool"
 done
+
+# 2b. WhatsApp-type agents (TOSHI_STRICT_SEND=1): a browser "send" (Enter, submit, Send button) needs Kapil's Haan
+if [ "$TOSHI_STRICT_SEND" = "1" ]; then
+  case "$t" in
+    *playwright__browser_press_key*)
+      printf '%s' "$input" | grep -Eiq '"key"[[:space:]]*:[[:space:]]*"(enter|numpadenter)"' && decide ask "WhatsApp send needs Kapil's Haan ($tool)";;
+    *playwright__browser_type*|*playwright__browser_fill_form*)
+      printf '%s' "$input" | grep -Eiq '"submit"[[:space:]]*:[[:space:]]*true' && decide ask "WhatsApp send needs Kapil's Haan ($tool)";;
+    *playwright__browser_click*)
+      printf '%s' "$input" | grep -Eiq '"element"[[:space:]]*:[[:space:]]*"[^"]*send' && decide ask "WhatsApp send needs Kapil's Haan ($tool)";;
+  esac
+fi
 
 # 3. Outgoing or destructive: ask Kapil
 if printf '%s' "$t" | grep -Eq 'send|reply|forward|trash|delete|spam|share_file'; then
