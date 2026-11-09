@@ -1,6 +1,6 @@
 # Toshi Agents: Golden Rule Book
 
-Version: v0.2 rev B | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
+Version: v0.2 rev C | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
 
 This rule book applies to every Toshi agent run with Claude Code on the Mac mini.
 Each agent's own charter (kept privately in iCloud) adds detail. If they disagree, the stricter rule wins.
@@ -13,7 +13,7 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Claude Code | 2.1.x (keep updated with `claude update`) |
 | Node.js | Current LTS (needed for the browser tool) |
 | Playwright MCP (browser tool) | 0.0.83 (pinned, via scripts/browser-mcp.sh) |
-| Rule book | v0.2 rev B |
+| Rule book | v0.2 rev C |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
@@ -80,6 +80,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 3. Connects: 9 to 11 per run, 3 times a week (Mon / Wed / Fri).
 4. Kavya's Daily Inbound & RFQ Report: discontinued. Agents no longer look for it.
 5. No cloud computer (09-11-2026): the Mac mini at home is Toshi's only agent computer. Data stays on Kapil's Mac and iCloud.
+6. Mac mini stays ON always (09-11-2026): never shut down, sleep or log out. Restarts only for updates; the app auto-starts after.
 
 ## 7. Roadmap
 
@@ -93,6 +94,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v0.2 rev C | 09-11-2026 | Suggestion buttons removed from chat (app v0.7 rev B). Decision 6: Mac mini always on. |
 | v0.2 rev B | 09-11-2026 | v0.7: own browser profile and working folder per agent; 🖥 Watch Mac screen. |
 | v0.2 rev A | 09-11-2026 | v0.6: Schedules, phone notifications (ntfy), folder access screen. |
 | v0.1 rev F | 09-11-2026 | All agents may create/update Gmail drafts when asked; sending works after Haan card (guard hook v0.2). |
