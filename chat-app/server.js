@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v0.8 rev C';
+const VERSION = 'v0.8 rev D';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -319,7 +319,7 @@ const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       return fs.createReadStream(path.join(PUBLIC, 'index.html')).pipe(res);
     }
     if (req.method === 'GET' && url.pathname === '/api/agents') return json(res, 200, listAgents().map(a => ({ ...a, busy: running.has(a.id), unread: !!loadChat(a.id).unread })));
