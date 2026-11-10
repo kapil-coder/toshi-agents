@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.0 rev E (10-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.1 rev A (10-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -121,6 +121,10 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
 .screen .bar{position:sticky;top:0;display:flex;gap:8px;align-items:center;padding:6px 10px;background:rgba(11,15,22,.85);color:#e8edf6;font:11px var(--f-mono);z-index:1}
 .screen .dotlive{width:8px;height:8px;border-radius:50%;background:#ff4d4d;animation:pulse 1s infinite}
 .screen .bar button{margin-left:auto;background:none;border:1px solid #445;color:#e8edf6;border-radius:6px;padding:2px 8px;cursor:pointer;font:inherit}
+.screen.ctl img{cursor:crosshair;outline:2px solid #ffc800;outline-offset:-2px}
+.ctlbar{position:sticky;bottom:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px 8px;background:rgba(11,15,22,.92);z-index:1}
+.ctlbar input{flex:1;min-width:120px;border:1px solid #445;background:#1b2433;color:#e8edf6;border-radius:6px;padding:5px 8px;font:12px var(--f-body)}
+.ctlbar button{background:#1b2433;border:1px solid #445;color:#e8edf6;border-radius:6px;padding:4px 8px;cursor:pointer;font:11px var(--f-mono)}
 .screen .err{color:#f0b04a;padding:14px;font:12px var(--f-body);text-align:left}
 .list{display:grid;gap:8px}
 .item{border:1px solid var(--line);border-radius:10px;padding:10px 12px;display:grid;gap:4px;background:var(--surface-2)}
@@ -164,9 +168,15 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
         </div>
       </div>
       <div class="screen" id="livePanel" hidden>
-        <div class="bar"><span class="dotlive"></span><span id="liveNote">LIVE · bot's computer</span><button id="liveMode" type="button">Mac screen</button><button id="liveClose" type="button" style="margin-left:6px">Close</button></div>
+        <div class="bar"><span class="dotlive"></span><span id="liveNote">LIVE · bot's computer</span><button id="liveCtl" type="button">🖱 Control</button><button id="liveMode" type="button" style="margin-left:6px">Mac screen</button><button id="liveClose" type="button" style="margin-left:6px">Close</button></div>
         <img id="liveImg" alt="Live view of the Mac mini screen">
         <div class="err" id="liveErr" hidden></div>
+        <div class="ctlbar" id="ctlBar" hidden>
+          <input id="ctlText" placeholder="Type text, then Send →" aria-label="Text to type in the bot browser">
+          <button id="ctlSend" type="button">Send text</button><button data-k="Enter" type="button">⏎ Enter</button><button data-k="Backspace" type="button">⌫</button><button data-k="Tab" type="button">Tab</button><button data-k="Escape" type="button">Esc</button>
+          <button id="ctlUp" type="button">▲</button><button id="ctlDown" type="button">▼</button><button id="ctlBack" type="button">← Back</button>
+          <input id="ctlUrl" placeholder="website (e.g. accounts.google.com)" aria-label="Open website"><button id="ctlGo" type="button">Go</button><button id="ctlStart" type="button">Start browser</button>
+        </div>
       </div>
       <div class="msgs" id="msgs"></div>
       <div class="files" id="files"></div>
@@ -559,6 +569,27 @@ function liveFrame() {
   img.src = liveUrl() + '&t=' + Date.now();
 }
 function liveUrl() { return '/api/screen?agent=' + encodeURIComponent(cur) + (liveMac ? '&mode=mac' : ''); }
+// 🖱 Control mode: clicks on the live picture go to the bot's browser
+let liveCtl = false;
+const ctl = (body) => fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: cur, ...body }) })
+  .then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error); setTimeout(liveFrame, 350); setTimeout(liveFrame, 1200); })
+  .catch(e => { $('liveErr').textContent = e.message; $('liveErr').hidden = false; });
+$('liveCtl').onclick = () => {
+  liveCtl = !liveCtl; if (liveCtl && liveMac) { liveMac = false; $('liveMode').textContent = 'Mac screen'; }
+  $('livePanel').classList.toggle('ctl', liveCtl); $('ctlBar').hidden = !liveCtl; $('liveCtl').textContent = liveCtl ? '✋ Stop control' : '🖱 Control';
+};
+$('liveImg').addEventListener('click', e => {
+  if (!liveCtl || liveMac) return; const r = $('liveImg').getBoundingClientRect();
+  ctl({ type: 'click', x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height });
+});
+$('ctlSend').onclick = () => { const t = $('ctlText').value; if (!t) return; ctl({ type: 'type', text: t }); $('ctlText').value = ''; };
+$('ctlText').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('ctlSend').click(); } });
+document.querySelectorAll('#ctlBar [data-k]').forEach(b => b.onclick = () => ctl({ type: 'key', key: b.dataset.k }));
+$('ctlUp').onclick = () => ctl({ type: 'scroll', dy: -500 }); $('ctlDown').onclick = () => ctl({ type: 'scroll', dy: 500 });
+$('ctlBack').onclick = () => ctl({ type: 'back' });
+$('ctlGo').onclick = () => { ctl({ type: 'nav', url: $('ctlUrl').value }); };
+$('ctlUrl').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('ctlGo').click(); } });
+$('ctlStart').onclick = () => ctl({ type: 'start' });
 $('liveMode').onclick = () => { liveMac = !liveMac; $('liveMode').textContent = liveMac ? "Bot's computer" : 'Mac screen'; liveFrame(); };
 function openLive() { $('livePanel').hidden = false; liveFrame(); clearInterval(liveTimer); liveTimer = setInterval(() => { if (!document.hidden && !$('livePanel').hidden) liveFrame(); }, 2000); }
 function closeLive() { $('livePanel').hidden = true; clearInterval(liveTimer); liveTimer = null; }

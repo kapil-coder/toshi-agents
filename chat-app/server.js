@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.0 rev E';
+const VERSION = 'v1.1 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -427,6 +427,72 @@ function recentSends(n = 30) {
   try { return fs.readFileSync(SENDS_FILE, 'utf8').split('\n').filter(Boolean).slice(-n).reverse().map(l => JSON.parse(l)); } catch { return []; }
 }
 
+
+// ---------- control the bot's browser from the Live view (v1.1) ----------
+// Sends real clicks / typing / keys / scroll / navigation to the bot's hidden Chrome via DevTools. Private: app is Tailscale-only.
+function cdpPage(agent, cb) {
+  const port = agentBrowserPort(agent);
+  if (!port) return cb(new Error("This bot's browser is not running yet. Ask the bot to open a website first."));
+  http.get({ host: '127.0.0.1', port, path: '/json/list', timeout: 2000 }, r => {
+    let d = ''; r.on('data', x => d += x);
+    r.on('end', () => {
+      let pages = []; try { pages = JSON.parse(d).filter(t => t.type === 'page' && t.webSocketDebuggerUrl); } catch {}
+      const pg = pages.find(t => !/^about:blank|^chrome:/.test(t.url)) || pages[0];
+      pg ? cb(null, pg) : cb(new Error('No page open in the bot browser.'));
+    });
+  }).on('error', () => cb(new Error("The bot's browser is not running.")));
+}
+function cdpRun(agent, steps, cb) {
+  cdpPage(agent, (err, pg) => {
+    if (err) return cb(err);
+    let ws, id = 0, i = 0; const results = [];
+    const timer = setTimeout(() => { try { ws.close(); } catch {} cb(new Error('Browser did not answer.')); }, 8000);
+    try { ws = new WebSocket(pg.webSocketDebuggerUrl); } catch (e) { clearTimeout(timer); return cb(e); }
+    const next = () => {
+      if (i >= steps.length) { clearTimeout(timer); try { ws.close(); } catch {} return cb(null, results); }
+      const st = steps[i++]; const params = typeof st.params === 'function' ? st.params(results) : st.params;
+      ws.send(JSON.stringify({ id: ++id, method: st.method, params: params || {} }));
+    };
+    ws.onopen = next;
+    ws.onmessage = m => { let j; try { j = JSON.parse(m.data); } catch { return; } if (j.id !== id) return; results.push(j.result || {}); next(); };
+    ws.onerror = () => { clearTimeout(timer); cb(new Error('Could not reach the bot browser.')); };
+  });
+}
+const KEYS = { Enter: 13, Backspace: 8, Tab: 9, Escape: 27, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Delete: 46 };
+function controlBrowser(agent, b, cb) {
+  const size = { method: 'Runtime.evaluate', params: { expression: 'JSON.stringify([innerWidth, innerHeight])', returnByValue: true } };
+  const wh = r => { try { return JSON.parse(r[0].result.value); } catch { return [1400, 900]; } };
+  if (b.type === 'click') {
+    const x = Math.max(0, Math.min(1, Number(b.x))), y = Math.max(0, Math.min(1, Number(b.y)));
+    const at = r => { const [w, h] = wh(r); return { x: Math.round(x * w), y: Math.round(y * h) }; };
+    return cdpRun(agent, [size,
+      { method: 'Input.dispatchMouseEvent', params: r => ({ type: 'mouseMoved', ...at(r) }) },
+      { method: 'Input.dispatchMouseEvent', params: r => ({ type: 'mousePressed', button: 'left', clickCount: 1, ...at(r) }) },
+      { method: 'Input.dispatchMouseEvent', params: r => ({ type: 'mouseReleased', button: 'left', clickCount: 1, ...at(r) }) }], cb);
+  }
+  if (b.type === 'type') return cdpRun(agent, [{ method: 'Input.insertText', params: { text: String(b.text || '').slice(0, 2000) } }], cb);
+  if (b.type === 'key') {
+    const k = String(b.key); if (!KEYS[k]) return cb(new Error('Unknown key'));
+    const p = { key: k, code: k, windowsVirtualKeyCode: KEYS[k], nativeVirtualKeyCode: KEYS[k] };
+    return cdpRun(agent, [{ method: 'Input.dispatchKeyEvent', params: { type: 'keyDown', ...p, ...(k === 'Enter' ? { text: '\r' } : {}) } }, { method: 'Input.dispatchKeyEvent', params: { type: 'keyUp', ...p } }], cb);
+  }
+  if (b.type === 'scroll') return cdpRun(agent, [size, { method: 'Input.dispatchMouseEvent', params: r => { const [w, h] = wh(r); return { type: 'mouseWheel', x: Math.round(w / 2), y: Math.round(h / 2), deltaX: 0, deltaY: Number(b.dy) || 400 }; } }], cb);
+  if (b.type === 'nav') {
+    let u = String(b.url || '').trim(); if (!u) return cb(new Error('Write a website address.'));
+    if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+    return cdpRun(agent, [{ method: 'Page.navigate', params: { url: u } }], cb);
+  }
+  if (b.type === 'back') return cdpRun(agent, [{ method: 'Runtime.evaluate', params: { expression: 'history.back()' } }], cb);
+  if (b.type === 'start') {
+    // start the bot's hidden browser on demand (e.g. to log in before giving it a task)
+    const env = { ...process.env };
+    if (!SHARED_BROWSER.has(agent)) { env.TOSHI_BROWSER_PROFILE = agentProfile(agent); env.TOSHI_BROWSER_OUTPUT = path.join(os.homedir(), '.toshi-agents', 'browser-output', agent); }
+    env.TOSHI_START_ONLY = '1';
+    return execFile('bash', [path.join(PROJECT, 'scripts', 'browser-mcp.sh')], { env, timeout: 30000 }, e => cb(e ? new Error('Could not start the browser: ' + e.message) : null, []));
+  }
+  cb(new Error('Unknown action'));
+}
+
 // ---------- server ----------
 const PUBLIC = path.join(__dirname, 'public');
 const server = http.createServer(async (req, res) => {
@@ -589,6 +655,12 @@ const server = http.createServer(async (req, res) => {
           git(['checkout', '--', ...files], e2 => e2 ? json(res, 500, { error: 'Could not reset local changes: ' + e2.message }) : go());
         });
       });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/control') {
+      const b = await readBody(req);
+      if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });
+      if (typeof WebSocket === 'undefined' && b.type !== 'start') return json(res, 500, { error: 'Node.js 22+ needed.' });
+      return controlBrowser(b.agent, b, err => { shotCache.delete(b.agent); err ? json(res, 400, { error: err.message }) : json(res, 200, { ok: true }); });
     }
     if (req.method === 'GET' && url.pathname === '/api/usage') return json(res, 200, usageSummary());
     if (req.method === 'GET' && url.pathname === '/api/sends') return json(res, 200, recentSends());

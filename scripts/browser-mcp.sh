@@ -1,5 +1,5 @@
 #!/bin/bash
-# Toshi Bot browser tool launcher v0.9 rev B (09-11-2026)
+# Toshi Bot browser tool launcher v1.1 rev A (10-11-2026)  (TOSHI_START_ONLY=1: just start the hidden browser)
 # Each agent has its own "computer": a hidden (headless) Chrome with its own profile,
 # started once and kept running, so nothing pops up on Kapil's screen.
 # The app shows it live in the bot window (🔴 Live). Set TOSHI_SHOW_BROWSER=1 to see the window instead.
@@ -21,4 +21,5 @@ if ! up; then
   for i in $(seq 1 60); do up && break; sleep 0.25; done
 fi
 printf '%s' "$PORT" > "$P/.toshi-port" 2>/dev/null
+[ "$TOSHI_START_ONLY" = "1" ] && exit 0
 exec npx -y @playwright/mcp@0.0.83 --cdp-endpoint "http://127.0.0.1:$PORT" --output-dir "$O"

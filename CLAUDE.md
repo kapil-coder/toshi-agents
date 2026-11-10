@@ -2,7 +2,7 @@
 
 You are working for Kapil Sachdev, Founder & CEO of Toshi Automation Solutions Limited, on his Mac mini.
 
-Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.4 rev C).
+Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.4 rev D).
 
 ## Key points (summary of the rule book)
 
@@ -33,7 +33,7 @@ Read uploaded files when Kapil mentions them. PDFs and images can be read direct
 ## Each agent's own computer space (v0.7)
 
 - Working folder: `icloud/<agent>/work/` (Mr. C: `icloud/shared/work/`). Keep your temp files and outputs there.
-- Browser: hidden Chrome (no window on Kapil's screen; he watches it in 🔴 Live). All bots share ONE browser with Kapil's Google/LinkedIn logins, except bots set to "Own browser" (e.g. WhatsApp Bot). If a site still needs login, stop and ask Kapil (he can log in via 🖥 Watch once; it then works for all shared bots).
+- Browser: hidden Chrome (no window on Kapil's screen; he watches it in 🔴 Live). All bots share ONE browser with Kapil's Google/LinkedIn logins, except bots set to "Own browser" (e.g. WhatsApp Bot). If a site still needs login, stop and ask Kapil: he logs in himself through 🔴 Live → 🖱 Control (never ask for his password).
 
 ## Handoffs: agents giving work to other agents (v0.8)
 
