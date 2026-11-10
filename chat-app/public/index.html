@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.3 rev D (10-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.4 rev B (10-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -289,6 +289,13 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
         <div class="fld"><span class="lbl">Status</span><div class="opts"><label><input type="checkbox" id="nOn"> Notifications on</label></div></div>
       </div>
       <div class="btns"><button class="btn pri" id="nSave" type="button">Save</button><button class="btn" id="nTest" type="button">Send test</button><span class="msg" id="nMsg"></span></div>
+      <h4 style="margin:10px 0 0">🗂 Prabhu ToshiCrm connector</h4>
+      <div class="note">Supabase → project <b>toshicrm</b> → Project Settings → API Keys → copy the <b>secret</b> key (service_role). Paste it here once; it is saved only in the Mac's Keychain.</div>
+      <div class="f2">
+        <div class="fld"><label for="crmKey">Secret key</label><input type="password" id="crmKey" autocomplete="off" placeholder="sb_secret_… or eyJ…"></div>
+        <div class="fld" style="align-content:end"><div class="btns"><button class="btn pri" id="crmSave" type="button">Save & test</button><button class="btn" id="crmTest" type="button">Test connection</button></div></div>
+      </div>
+      <div class="msg" id="crmMsg"></div>
       <h4 style="margin:10px 0 0">👥 Team Desk on WhatsApp</h4>
       <div class="note">Team asks in a WhatsApp group, starting with the trigger word. Answers come only from files in iCloud Drive → ToshiAgents → <b>team-info</b> (FAQ, price list, order status sheets). No internet, email, Zoho or other bots for the team.</div>
       <div class="opts"><label><input type="checkbox" id="tmOn"> Team Desk ON</label></div>
@@ -773,6 +780,9 @@ $('tmSave').onclick = () => post('/api/team', { enabled: $('tmOn').checked, grou
   members: $('tmMembers').value, topics: $('tmTopics').value, interval: Number($('tmInt').value), model: $('tmModel').value,
   refreshOn: $('tmRef').checked, refreshTimes: $('tmRefTimes').value, sources: $('tmSources').value, refreshAgent: $('tmRefAgent').value }).then(() => { $('tmMsg').textContent = 'Saved ✓'; loadTeam(); }).catch(e => { $('tmMsg').textContent = e.message; });
 $('tmRefNow').onclick = () => post('/api/team', { action: 'refreshNow' }).then(() => { $('tmMsg').textContent = 'Refreshing… see the bot chat'; }).catch(e => { $('tmMsg').textContent = e.message; });
+const crmCall = body => fetch('/api/toshicrm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(async r => { const d = await r.json(); $('crmMsg').textContent = d.msg || d.error || ''; $('crmMsg').style.color = r.ok ? 'var(--ok)' : 'var(--bad)'; });
+$('crmSave').onclick = () => { const k = $('crmKey').value.trim(); if (!k) { $('crmMsg').textContent = 'Paste the key first.'; return; } $('crmMsg').textContent = 'Saving…'; crmCall({ key: k }).finally(() => { $('crmKey').value = ''; }); };
+$('crmTest').onclick = () => { $('crmMsg').textContent = 'Testing…'; crmCall({ action: 'test' }); };
 $('tmNow').onclick = () => post('/api/team', { action: 'checkNow' }).then(() => { $('tmMsg').textContent = 'Checking… see WhatsApp Bot chat'; }).catch(e => { $('tmMsg').textContent = e.message; });
 async function loadSettings() {
   loadTeam().catch(settingsLoadFailed);

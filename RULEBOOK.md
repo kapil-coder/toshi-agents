@@ -18,7 +18,7 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
 | Guard hook | v0.5 rev A |
-| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings, update safety, ToshiCrm connector) | v1.4 rev A |
+| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings, update safety, ToshiCrm connector + key box) | v1.4 rev B |
 
 ## 2. Rules for every agent
 

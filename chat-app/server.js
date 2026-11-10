@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.4 rev A';
+const VERSION = 'v1.4 rev B';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -836,6 +836,16 @@ const server = http.createServer(async (req, res) => {
       return controlBrowser(b.agent, b, err => { shotCache.delete(b.agent); err ? json(res, 400, { error: err.message }) : json(res, 200, { ok: true }); });
     }
     if (req.method === 'GET' && url.pathname === '/api/team') return json(res, 200, { cfg: teamCfg(), agent: waAgent(), log: teamLog() });
+    if (req.method === 'POST' && url.pathname === '/api/toshicrm') {
+      // Save the ToshiCrm secret key into macOS Keychain (never written to files or logs), then test the connection
+      const b = await readBody(req); const k = String(b.key || '').trim();
+      const test = () => execFile(process.execPath, [path.join(PROJECT, 'chat-app', 'toshicrm-mcp.js'), '--test'], { timeout: 30000 }, (e, out) =>
+        json(res, e ? 400 : 200, { ok: !e, msg: String(out || (e && e.message) || '').trim().slice(0, 300) }));
+      if (b.action === 'test') return test();
+      if (!/^[A-Za-z0-9._\-]{20,}$/.test(k)) return json(res, 400, { error: 'That does not look like a Supabase secret key.' });
+      if (process.platform !== 'darwin') return json(res, 400, { error: 'Keychain is only on the Mac.' });
+      return execFile('security', ['add-generic-password', '-U', '-s', 'toshicrm-supabase', '-a', 'toshibot', '-w', k], err => err ? json(res, 500, { error: 'Could not save to Keychain.' }) : test());
+    }
     if (req.method === 'POST' && url.pathname === '/api/team') {
       const b = await readBody(req); const s = getSettings(); const t = Object.assign(teamCfg(), s.team || {});
       if (b.action === 'checkNow') { teamTick(true); return json(res, 200, { ok: true }); }
