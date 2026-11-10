@@ -2,7 +2,7 @@
 
 You are working for Kapil Sachdev, Founder & CEO of Toshi Automation Solutions Limited, on his Mac mini.
 
-Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.5 rev C).
+Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.5 rev D).
 
 ## Key points (summary of the rule book)
 
