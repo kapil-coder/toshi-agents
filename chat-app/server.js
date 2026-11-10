@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.5 rev B';
+const VERSION = 'v1.6 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -162,9 +162,39 @@ function runClaude(agent, message, opts, onEvent) {
     if (denials.length) onEvent({ t: 'approve', v: denials });
     if (!finalText.length && code !== 0) onEvent({ t: 'error', v: (errText || 'Claude Code stopped (code ' + code + ').').slice(-600) });
     onEvent({ t: 'done' });
+    setTimeout(() => drainQueue(agent), 800); // v1.6: next queued message
   });
   return child;
 }
+
+// ---------- v1.6 message queue: type while a bot works; queued messages run one by one ----------
+// Paused while a Haan card is waiting (answering the card continues the queue).
+function drainQueue(agent) {
+  if (!validAgent(agent) || running.has(agent)) return;
+  const c = loadChat(agent);
+  if (!Array.isArray(c.queue) || !c.queue.length || (c.pending && c.pending.length)) return;
+  const q = c.queue.shift(); saveChat(agent, c);
+  startRun(agent, q.text, { tone: q.tone, allowOnce: [] }, () => {});
+}
+function queueAction(b) {
+  const agent = b.agent; if (!validAgent(agent)) return { code: 404, error: 'Unknown agent' };
+  const c = loadChat(agent); c.queue = Array.isArray(c.queue) ? c.queue : [];
+  const i = c.queue.findIndex(x => x.id === b.id);
+  if (b.action === 'add') {
+    const text = String(b.message || '').trim().slice(0, 8000); if (!text) return { code: 400, error: 'Empty message' };
+    if (c.queue.length >= 20) return { code: 409, error: 'Queue is full (20). Wait for the bot to finish some.' };
+    c.queue.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text, tone: b.tone === 'fun' ? 'fun' : 'pro', at: stamp() });
+  } else if (i < 0) return { code: 404, error: 'That queued message is gone (it may have started already).' };
+  else if (b.action === 'remove') c.queue.splice(i, 1);
+  else if (b.action === 'edit') { const t = String(b.message || '').trim().slice(0, 8000); if (!t) c.queue.splice(i, 1); else c.queue[i].text = t; }
+  else if (b.action === 'now') { const [q] = c.queue.splice(i, 1); c.queue.unshift(q); delete c.pending; }
+  else return { code: 400, error: 'Unknown action' };
+  saveChat(agent, c);
+  if (b.action === 'now' && running.has(agent)) running.get(agent).kill('SIGINT'); // drain starts it when the run closes
+  else setTimeout(() => drainQueue(agent), 300);
+  return { code: 200, queue: c.queue };
+}
+setTimeout(() => { for (const a of listAgents()) drainQueue(a.id); }, 8000); // after a restart
 
 // ---------- create agent ----------
 function slugify(s) { return String(s).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40); }
@@ -692,7 +722,11 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/chat') {
       const id = url.searchParams.get('agent') || '';
       if (!validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
-      const c = loadChat(id); return json(res, 200, { messages: c.messages, pending: c.pending || [], allow: c.allow || [], busy: running.has(id) });
+      const c = loadChat(id); return json(res, 200, { messages: c.messages, pending: c.pending || [], allow: c.allow || [], busy: running.has(id), queue: c.queue || [] });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/queue') {
+      const r = queueAction(await readBody(req));
+      return json(res, r.code, r.error ? { error: r.error } : { ok: true, queue: r.queue });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const b = await readBody(req);

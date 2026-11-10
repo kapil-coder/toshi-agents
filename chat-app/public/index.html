@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.5 rev B (11-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.6 rev A (10-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,10 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.queue{margin:0 16px 8px;border:1px dashed #e0b44a;background:rgba(245,195,59,.13);border-radius:10px;padding:6px 10px;font-size:13px}
+.queue .qh{font-weight:600;margin-bottom:2px}.queue .qi{display:flex;align-items:center;gap:4px;padding:3px 0;border-top:1px solid rgba(224,180,74,.35)}
+.queue .qi span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.queue .qi button{border:0;background:none;font-size:15px;padding:2px 5px;cursor:pointer;color:inherit}
+.composer .stop{background:#e0564f;color:#fff;border:0;border-radius:10px;padding:0 14px;font-weight:700;cursor:pointer}
 .mic{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;width:44px;cursor:pointer;font-size:18px;position:relative}
 .mic.rec{background:#c0392b;border-color:#c0392b;animation:pulse 1s infinite}
 .mic small{position:absolute;bottom:1px;right:3px;font:9px var(--f-mono);color:var(--muted)}
@@ -220,6 +224,7 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
       </div>
       <div class="msgs" id="msgs"></div>
       <div class="files" id="files"></div>
+      <div class="queue" id="queue" hidden></div>
       <form class="composer" id="form">
         <button class="clip" id="clip" type="button" title="Attach files (or drag them here)" aria-label="Attach files">📎</button>
         <input type="file" id="fileIn" multiple hidden>
@@ -234,6 +239,7 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
         <button class="mic" id="mic" type="button" title="Speak your message (tap again to stop). Long-press to switch Hindi / English." aria-label="Speak message">🎤<small id="micLang">HI</small></button>
         <textarea id="inp" placeholder="Message…" aria-label="Message"></textarea>
         <button class="send" id="sendBtn" type="submit">Send</button>
+        <button class="stop" id="stopBtn" type="button" title="Stop current task (queue continues)" aria-label="Stop current task" hidden>■</button>
       </form>
     </section>
     <aside class="panel">
@@ -401,7 +407,29 @@ let agents = [], cur = 'mr-c', tone = 'pro';
 const busyAgents = new Set(); // agents working right now (several can run in parallel)
 let serverBusy = false, shown = { agent: '', count: -1, pending: -1, busy: false };
 const isBusy = () => busyAgents.has(cur) || serverBusy;
-function syncSend() { $('sendBtn').disabled = isBusy(); $('sendBtn').textContent = isBusy() ? '…' : 'Send'; }
+function syncSend() { $('sendBtn').disabled = false; $('sendBtn').textContent = isBusy() ? 'Queue' : 'Send'; $('sendBtn').title = isBusy() ? 'Bot is working: this goes in the queue and runs next' : ''; $('stopBtn').hidden = !isBusy(); }
+// ---------- v1.6 message queue ----------
+let queueNow = [], pendingNow = 0;
+function showQueue(q, pend) {
+  queueNow = q || []; if (pend !== undefined) pendingNow = pend;
+  const box = $('queue'); box.replaceChildren(); box.hidden = !queueNow.length; if (!queueNow.length) return;
+  box.append(el('div', 'qh', '⏳ Queued (' + queueNow.length + ')' + (pendingNow ? ' — paused: answer the Haan card first' : ' — runs one by one after the current task')));
+  queueNow.forEach((x, n) => {
+    const r = el('div', 'qi'); r.append(el('span', null, (n + 1) + '. ' + x.text));
+    const b = (ic, t, f) => { const k = el('button', null, ic); k.type = 'button'; k.title = t; k.onclick = f; return k; };
+    r.append(b('⚡', 'Stop current task and send this now', () => queueDo('now', x.id)),
+      b('✏️', 'Edit', () => { const t = prompt('Edit queued message', x.text); if (t !== null) queueDo('edit', x.id, t); }),
+      b('✕', 'Remove', () => queueDo('remove', x.id)));
+    box.append(r);
+  });
+}
+async function queueDo(action, id, message) {
+  try {
+    const r = await fetch('/api/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: cur, action, id, message, tone }) });
+    const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Queue failed');
+    showQueue(d.queue); if (action === 'now' || !isBusy()) setTimeout(() => loadChat().catch(() => {}), 900);
+  } catch (e) { $('msgs').append(el('div', 'err', e.message)); scroll(); }
+}
 try { tone = localStorage.getItem('tone') || 'pro'; cur = localStorage.getItem('agent') || 'mr-c'; } catch {}
 
 // ---------- v1.5 bot icons ----------
@@ -466,10 +494,12 @@ function showHeader() {
   { const h = botIcon(a, true); h.id = 'hav'; $('hav').replaceWith(h); }
   $('inp').placeholder = 'Message ' + a.name + '…';
 }
+const qSig = d => (d.queue || []).map(x => x.id + x.text.length).join(',');
 async function loadChat(pre) {
   const d = pre || await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json();
   serverBusy = !!d.busy && !busyAgents.has(cur);
-  shown = { agent: cur, count: d.messages.length, pending: (d.pending || []).length, busy: !!d.busy };
+  shown = { agent: cur, count: d.messages.length, pending: (d.pending || []).length, busy: !!d.busy, q: qSig(d) };
+  showQueue(d.queue, (d.pending || []).length);
   fetch('/api/seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: cur }) }).catch(() => {});
   const m = $('msgs'); m.replaceChildren();
   if (!d.messages.length) {
@@ -479,7 +509,7 @@ async function loadChat(pre) {
   for (const x of d.messages) addMsg(x.who, x.text, x.at);
   if (d.pending && d.pending.length) addApproval(d.pending);
   $('allowList').textContent = d.allow.length ? d.allow.map(label).join(', ') : 'None yet';
-  if (isBusy()) m.append(el('div', 'tool', serverBusy ? 'Working (started on another device)… updates here automatically.' : 'Still working… the reply appears here when done. You can use other agents meanwhile.'));
+  if (isBusy()) m.append(el('div', 'tool', serverBusy ? 'Working (queued task or another device)… updates here automatically.' : 'Still working… the reply appears here when done. You can use other agents meanwhile.'));
   syncSend(); scroll();
 }
 function label(t) { const m = String(t).match(/^mcp__(.+?)__(.+)$/); return m ? m[1].replace(/^claude_ai_/, '').replace(/_/g, ' ') + ': ' + m[2].replace(/_/g, ' ') : t; }
@@ -503,7 +533,8 @@ function addApproval(items) {
   btns.append(yes, always, no); box.append(btns); $('msgs').append(box); scroll();
 }
 async function send(text, opts = {}) {
-  if (isBusy() || !text.trim()) return;
+  if (!text.trim()) return;
+  if (isBusy()) return queueDo('add', null, text);
   const agent = cur; busyAgents.add(agent); syncSend(); markSide();
   if (liveAuto) openLive();
   const here = () => cur === agent;
@@ -602,6 +633,7 @@ $('form').onsubmit = e => {
   if (attached.length) { v = (v || 'Maine ye files upload ki hain. Padh kar short summary dijiye.') + '\n\nUploaded files:\n' + attached.map(a => '- ' + a.path).join('\n'); attached = []; showFiles(); }
   $('inp').value = ''; send(v);
 };
+$('stopBtn').onclick = () => fetch('/api/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: cur }) }).catch(() => {});
 $('inp').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('form').requestSubmit(); } };
 function setTone(t) { tone = t; $('fun').classList.toggle('on', t === 'fun'); $('pro').classList.toggle('on', t === 'pro'); try { localStorage.setItem('tone', t); } catch {} }
 $('fun').onclick = () => setTone('fun'); $('pro').onclick = () => setTone('pro'); setTone(tone);
@@ -667,7 +699,7 @@ async function poll() {
   try {
     const d = await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json();
     if (shown.agent !== cur) return;
-    if (d.messages.length !== shown.count || (d.pending || []).length !== shown.pending || !!d.busy !== shown.busy) loadChat(d);
+    if (d.messages.length !== shown.count || (d.pending || []).length !== shown.pending || !!d.busy !== shown.busy || qSig(d) !== shown.q) loadChat(d);
     loadAgentsQuiet();
   } catch {}
 }
