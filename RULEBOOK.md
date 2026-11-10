@@ -1,6 +1,6 @@
 # Toshi Bot: Golden Rule Book
 
-Version: v0.4 rev H | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
+Version: v0.4 rev I | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
 
 This rule book applies to every Toshi Bot agent run with Claude Code on the Mac mini. (Product renamed from "Toshi Agents" to "Toshi Bot" on 09-11-2026; folder and repo names stay toshi-agents.)
 Each agent's own charter (kept privately in iCloud) adds detail. If they disagree, the stricter rule wins.
@@ -13,12 +13,12 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Claude Code | 2.1.x (keep updated with `claude update`) |
 | Node.js | Current LTS (needed for the browser tool) |
 | Playwright MCP (browser tool) | 0.0.83 (pinned), connects to each bot's hidden Chrome via scripts/browser-mcp.sh v0.9 rev B |
-| Rule book | v0.4 rev H |
+| Rule book | v0.4 rev I |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
 | Guard hook | v0.4 rev B |
-| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $) | v1.3 rev C |
+| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings) | v1.3 rev D |
 
 ## 2. Rules for every agent
 
@@ -117,6 +117,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v0.4 rev I | 10-11-2026 | Fix: v1.3 rev C had removed the Team Desk loader (Settings showed blank). Restored; settings now saved atomically with 15 rolling backups in iCloud/ToshiAgents/backups/settings; blank screen replaced by an error message. |
 | v0.4 rev H | 10-11-2026 | Usage page shows actual cost (₹0 extra, Max plan) and share of work per bot; no dollar "API value". Alert by runs/day. |
 | v0.4 rev G | 10-11-2026 | App v1.3 rev A: connectors per bot (recommended set), auto-fresh chat after 15 runs, daily usage alert. |
 | v0.4 rev F | 10-11-2026 | App v1.2 rev B: team-info auto-refresh from Zoho / Sheets / Drive / company website. |

@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.3 rev C';
+const VERSION = 'v1.3 rev D';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -26,7 +26,7 @@ const running = new Map(); // agent -> child process
 // WhatsApp-type bots keep their own browser by default (their WhatsApp Web login lives there).
 const SHARED_BROWSER = { has: agent => usesSharedBrowser(agent) };
 function usesSharedBrowser(agent) {
-  const own = (readJSON(path.join(STORE_DIR(), 'app-settings.json'), {}).ownBrowser) || {};
+  const own = (readSettingsSafe().ownBrowser) || {};
   if (agent in own) return !own[agent];
   return !/whatsapp|diwali/i.test(agent);
 }
@@ -41,7 +41,7 @@ execFile('claude', ['--version'], (e, out) => { claudeVersion = e ? 'not found' 
 
 // ---------- agents ----------
 function listAgents() {
-  const names = readJSON(path.join(STORE_DIR(), 'app-settings.json'), {}).names || {};
+  const names = readSettingsSafe().names || {};
   return listAgentsRaw().map(a => names[a.id] ? { ...a, name: names[a.id] } : a);
 }
 function listAgentsRaw() {
@@ -218,9 +218,32 @@ const STORE = path.dirname(DATA); // iCloud/ToshiAgents (or .data)
 const SETTINGS_FILE = path.join(STORE, 'app-settings.json');
 const SCHED_FILE = path.join(STORE, 'schedules.json');
 const LOCAL_SETTINGS = path.join(PROJECT, '.claude', 'settings.local.json');
-const writeJSON = (f, o) => fs.writeFileSync(f, JSON.stringify(o, null, 1));
+// v1.3 rev D: safe settings. Atomic writes (temp file + rename), a rolling backup of the last 15 versions,
+// and if the file can't be read (e.g. iCloud mid-sync) we use the latest good backup and NEVER write an empty copy back.
+const BACKUP_DIR = path.join(STORE, 'backups', 'settings');
+const writeJSON = (f, o) => {
+  const tmp = f + '.tmp-' + process.pid; fs.writeFileSync(tmp, JSON.stringify(o, null, 1)); fs.renameSync(tmp, f);
+  if (f === SETTINGS_FILE) {
+    try {
+      fs.mkdirSync(BACKUP_DIR, { recursive: true });
+      fs.writeFileSync(path.join(BACKUP_DIR, 'app-settings-' + Date.now() + '.json'), JSON.stringify(o, null, 1));
+      const old = fs.readdirSync(BACKUP_DIR).filter(x => x.endsWith('.json')).sort(); old.slice(0, Math.max(0, old.length - 15)).forEach(x => fs.unlinkSync(path.join(BACKUP_DIR, x)));
+    } catch {}
+  }
+};
+let lastGoodSettings = null;
+function readSettingsSafe() {
+  try { const o = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')); if (o && typeof o === 'object') { lastGoodSettings = o; return o; } } catch {}
+  if (lastGoodSettings) return lastGoodSettings;                       // file busy/unreadable: use what we had
+  try {                                                                // first start after a bad file: newest good backup
+    for (const x of fs.readdirSync(BACKUP_DIR).filter(x => x.endsWith('.json')).sort().reverse()) {
+      try { const o = JSON.parse(fs.readFileSync(path.join(BACKUP_DIR, x), 'utf8')); if (o && typeof o === 'object') { lastGoodSettings = o; return o; } } catch {}
+    }
+  } catch {}
+  return {};
+}
 function getSettings() {
-  return Object.assign({ ntfyTopic: '', notify: false, appUrl: 'https://kapils-mac-mini.tailac1d46.ts.net' }, readJSON(SETTINGS_FILE, {}));
+  return Object.assign({ ntfyTopic: '', notify: false, appUrl: 'https://kapils-mac-mini.tailac1d46.ts.net' }, JSON.parse(JSON.stringify(readSettingsSafe())));
 }
 const agentName = id => (listAgents().find(a => a.id === id) || { name: id }).name;
 
