@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.2 rev A';
+const VERSION = 'v1.2 rev B';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -499,7 +499,9 @@ function controlBrowser(agent, b, cb) {
 // Then: run 1 = WhatsApp Bot only COLLECTS new trigger messages (no replies);
 // the app answers each with chat-app/team-ask.js (locked-down: reads only iCloud/ToshiAgents/team-info);
 // run 2 = WhatsApp Bot posts exactly those answers in the group.
-function teamCfg() { return Object.assign({ enabled: false, group: 'Toshi Bot Team', trigger: '@Toshi', members: '', topics: '', interval: 120, model: 'sonnet' }, getSettings().team || {}); }
+function teamCfg() { return Object.assign({ enabled: false, group: 'Toshi Bot Team', trigger: '@Toshi', members: '', topics: '', interval: 120, model: 'sonnet',
+  refreshOn: false, refreshTimes: '08:00, 13:00, 18:00', refreshAgent: 'mr-c',
+  sources: 'Zoho CRM (read-only): open deals and quotations with stage, product and expected date (no phone numbers or emails).\nGoogle Sheets: any order-status or stock sheet you can find.\nGoogle Drive: the latest Toshi price list and catalogue summary.\nCompany website https://toshibot-toshi.netlify.app/ (open in the browser): products, services, company FAQ.', lastRefresh: '' }, getSettings().team || {}); }
 function waAgent() { const t = getSettings().team || {}; if (t.agent && validAgent(t.agent)) return t.agent; const a = listAgents().find(x => /whatsapp|diwali/i.test(x.id + ' ' + x.name)); return a ? a.id : ''; }
 let teamLastCheck = 0, teamBusy = false;
 function teamUnread(agent, group, cb) {
@@ -542,6 +544,49 @@ TEAM>>>`;
 }
 setInterval(teamTick, 20000);
 function teamLog(n = 15) { try { return fs.readFileSync(path.join(path.dirname(DATA), 'team-log.jsonl'), 'utf8').split('\n').filter(Boolean).slice(-n).reverse().map(l => JSON.parse(l)); } catch { return []; } }
+
+
+// ---------- Team-info auto-refresh (v1.2 rev B): bots fill team-info by themselves ----------
+// At set IST times a bot collects the allowed data (read-only tools) and prints file blocks; the app writes them into team-info.
+let refreshBusy = false;
+function teamRefresh(force) {
+  const c = teamCfg(); const agent = validAgent(c.refreshAgent) ? c.refreshAgent : 'mr-c';
+  if (refreshBusy || running.has(agent)) return false;
+  refreshBusy = true; let said = '';
+  const task = `Team-info refresh for Team Desk (set up by Kapil). Use only READ-ONLY tools (Zoho CRM read, Google Sheets/Drive read). Collect:
+${c.sources}
+
+Rules: exclude customer phone numbers, emails, bank details, salaries, investor or financial figures, passwords. Keep only what the team needs for: ${c.topics || 'order and quotation status, stock, catalogue and prices, delivery dates, company FAQ'}.
+Write nothing yourself and send nothing. Output each file as a block (max 6 files, .md or .csv, each under 150 KB), first line of each file "Updated: <dd-mm-yyyy HH:MM> IST":
+<<<FILE orders.md
+...content...
+FILE>>>`;
+  startRun(agent, task, { tone: 'pro', allowOnce: [] }, ev => {
+    if (ev.t === 'text') said += ev.v + '\n';
+    if (ev.t !== 'done') return;
+    const dir = path.join(path.dirname(DATA), 'team-info'); fs.mkdirSync(dir, { recursive: true });
+    const written = [];
+    for (const m of said.matchAll(/<<<FILE\s+([^\n]+)\n([\s\S]*?)\nFILE>>>/g)) {
+      const name = path.basename(m[1].trim()).replace(/[^\w.\- ]/g, '_');
+      if (!/\.(md|csv|txt)$/i.test(name) || written.length >= 6) continue;
+      fs.writeFileSync(path.join(dir, name), m[2].slice(0, 150000)); written.push(name);
+    }
+    const s = getSettings(); s.team = Object.assign(teamCfg(), s.team || {}); s.team.lastRefresh = stamp() + ' IST · ' + (written.join(', ') || 'no files'); writeJSON(SETTINGS_FILE, s);
+    refreshBusy = false;
+  }, { scheduled: true, time: 'team-info', label: '🔄 Team-info refresh' });
+  return true;
+}
+const refreshDone = {};
+function refreshTick() {
+  const c = teamCfg(); if (!c.refreshOn) return;
+  const n = nowIST();
+  for (const t of String(c.refreshTimes).split(/[ ,]+/).filter(Boolean)) {
+    const tm = toMin(t); if (tm < 0 || n.min < tm || n.min >= tm + 10) continue;
+    const key = n.date + t; if (refreshDone[key]) continue;
+    if (teamRefresh()) refreshDone[key] = true;
+  }
+}
+setInterval(refreshTick, 30000);
 
 // ---------- server ----------
 const PUBLIC = path.join(__dirname, 'public');
@@ -716,6 +761,9 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/team') {
       const b = await readBody(req); const s = getSettings(); const t = Object.assign(teamCfg(), s.team || {});
       if (b.action === 'checkNow') { teamTick(true); return json(res, 200, { ok: true }); }
+      if (b.action === 'refreshNow') return teamRefresh(true) ? json(res, 200, { ok: true }) : json(res, 409, { error: 'That bot is busy. Try again in a minute.' });
+      for (const k of ['refreshTimes', 'sources', 'refreshAgent']) if (typeof b[k] === 'string') t[k] = b[k].slice(0, 4000);
+      if (typeof b.refreshOn === 'boolean') t.refreshOn = b.refreshOn;
       for (const k of ['group', 'trigger', 'members', 'topics']) if (typeof b[k] === 'string') t[k] = b[k].slice(0, 4000);
       if (b.interval) t.interval = Math.max(60, Math.min(3600, Number(b.interval) || 120));
       if (typeof b.enabled === 'boolean') t.enabled = b.enabled;
