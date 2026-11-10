@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.4 rev C';
+const VERSION = 'v1.5 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -679,7 +679,9 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, { name: 'Toshi Bot', short_name: 'Toshi Bot', start_url: '/', display: 'standalone', background_color: '#16202f', theme_color: '#16202f',
         icons: [{ src: '/icon-180.png', sizes: '180x180', type: 'image/png' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }] });
     }
-    if (req.method === 'GET' && url.pathname === '/api/agents') return json(res, 200, listAgents().map(a => ({ ...a, busy: running.has(a.id), unread: !!loadChat(a.id).unread })));
+    if (req.method === 'GET' && url.pathname === '/api/agents') { const icons = getSettings().icons || {}; const adir = path.join(STORE, 'avatars');
+        return json(res, 200, listAgents().map(a => ({ ...a, busy: running.has(a.id), unread: !!loadChat(a.id).unread, icon: icons[a.id] || '',
+          photo: ['png', 'jpg', 'jpeg', 'webp'].some(e => fs.existsSync(path.join(adir, a.id + '.' + e))) }))); }
     if (req.method === 'GET' && url.pathname === '/api/status') {
       return json(res, 200, {
         app: VERSION, claude: claudeVersion, host: os.hostname(), uptime: os.uptime(),
@@ -836,6 +838,29 @@ const server = http.createServer(async (req, res) => {
       return controlBrowser(b.agent, b, err => { shotCache.delete(b.agent); err ? json(res, 400, { error: err.message }) : json(res, 200, { ok: true }); });
     }
     if (req.method === 'GET' && url.pathname === '/api/team') return json(res, 200, { cfg: teamCfg(), agent: waAgent(), log: teamLog() });
+    // v1.5: bot photos (stored only in iCloud/ToshiAgents/avatars, never in git)
+    if (url.pathname === '/api/avatar') {
+      const id = url.searchParams.get('agent') || ''; if (!validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
+      const dir = path.join(STORE, 'avatars');
+      const find = () => ['png', 'jpg', 'jpeg', 'webp'].map(e => path.join(dir, id + '.' + e)).find(f => fs.existsSync(f));
+      if (req.method === 'GET') {
+        const f = find(); if (!f) return json(res, 404, { error: 'No photo' });
+        res.writeHead(200, { 'Content-Type': 'image/' + (f.endsWith('png') ? 'png' : f.endsWith('webp') ? 'webp' : 'jpeg'), 'Cache-Control': 'no-cache' }); return fs.createReadStream(f).pipe(res);
+      }
+      if (req.method === 'POST') {
+        const type = String(req.headers['content-type'] || ''); const ext = /png/.test(type) ? 'png' : /webp/.test(type) ? 'webp' : /jpe?g/.test(type) ? 'jpg' : '';
+        if (!ext) return json(res, 400, { error: 'Use a PNG, JPG or WEBP picture.' });
+        const chunks = []; let size = 0, big = false;
+        req.on('data', c => { size += c.length; if (size > 3e6) { big = true; req.destroy(); } else chunks.push(c); });
+        req.on('end', () => {
+          if (big) return json(res, 413, { error: 'Picture is over 3 MB.' });
+          fs.mkdirSync(dir, { recursive: true }); const old = find(); if (old) fs.unlinkSync(old);
+          fs.writeFileSync(path.join(dir, id + '.' + ext), Buffer.concat(chunks));
+          const s2 = getSettings(); s2.icons = s2.icons || {}; s2.icons[id] = 'photo'; writeJSON(SETTINGS_FILE, s2); json(res, 200, { ok: true });
+        });
+        return;
+      }
+    }
     if (req.method === 'POST' && url.pathname === '/api/toshicrm') {
       // Save the ToshiCrm secret key into macOS Keychain (never written to files or logs), then test the connection
       const b = await readBody(req); const k = String(b.key || '').trim();
@@ -911,6 +936,11 @@ const server = http.createServer(async (req, res) => {
               try { fs.unlinkSync(path.join(dir, '.toshi-port')); } catch {}
             json(res, 200, { ok: true });
           });
+        }
+        if (b.action === 'icon') {
+          if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });
+          s.icons = s.icons || {}; if (b.icon) s.icons[b.id] = String(b.icon).slice(0, 20); else delete s.icons[b.id];
+          writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
         }
         if (b.action === 'ownBrowser') {
           if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });
