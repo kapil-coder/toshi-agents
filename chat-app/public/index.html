@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.3 rev B (10-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.3 rev C (10-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -319,10 +319,10 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
       <div class="list" id="sendList"></div>
       <h4 style="margin:10px 0 0">📊 Usage</h4>
       <div id="usageBox"><div class="note">Loading…</div></div>
-      <div class="note">Your Max plan covers this: no extra money. "API value" shows what the same work would cost on pay-per-use, so you can see which bot works most. Plan limits: claude.ai → Settings → Usage.</div>
+      <div class="note">Your actual plan usage (limits left): <a href="https://claude.ai/settings/usage" target="_blank" rel="noopener">claude.ai → Settings → Usage</a>. If a limit is reached, bots pause until it resets; nothing is charged.</div>
       <h4 style="margin:10px 0 0">💡 Save limits</h4>
       <div class="f2">
-        <div class="fld"><label for="dayAlert">Phone alert when today's API value crosses ($, 0 = off)</label><input type="text" id="dayAlert" placeholder="100"></div>
+        <div class="fld"><label for="dayAlert">Phone alert when bot runs today cross (0 = off)</label><input type="text" id="dayAlert" placeholder="60"></div>
         <div class="fld" style="align-content:end"><div class="btns"><button class="btn" id="dayAlertSave" type="button">Save alert</button><button class="btn pri" id="recAll" type="button">Apply recommended connectors to all bots</button></div></div>
       </div>
       <div class="note">Each bot loads only the connectors ticked for it (tap "Connectors" on a bot below). Recommended: WhatsApp bots = browser only; others = browser, Gmail, Google, Zoho, Apollo. Chats also start fresh automatically after 15 messages.</div>
@@ -732,49 +732,30 @@ $('sSave').onclick = async () => {
 async function loadUsage() {
   const u = await (await fetch('/api/usage')).json(); const box = $('usageBox'); box.replaceChildren();
   const tiles = el('div', 'f2');
-  for (const [lbl, v] of [['Today', u.today], ['This month', u.month]]) {
-    const it = el('div', 'item'); it.append(el('span', 'meta', lbl), el('b', null, v.runs + ' runs · API value $' + v.usd.toFixed(2)), el('span', 'meta', (v.tokens / 1000).toFixed(0) + 'k tokens · ' + v.turns + ' steps'));
-    tiles.append(it);
-  }
-  box.append(tiles);
-  if (!u.agents.length) { box.append(el('div', 'note', 'No runs counted yet. Counting started with v0.9 rev C.')); return; }
+  const cost = el('div', 'item'); cost.append(el('span', 'meta', 'Your extra cost'), el('b', null, '₹0 · covered by your Claude Max plan'), el('span', 'meta', 'Fixed monthly plan, no per-use bill'));
+  tiles.append(cost);
+  const work = el('div', 'item'); work.append(el('span', 'meta', 'Bot work'), el('b', null, 'Today ' + u.today.runs + ' runs · This month ' + u.month.runs + ' runs'), el('span', 'meta', u.today.turns + ' steps today'));
+  tiles.append(work); box.append(tiles);
+  if (!u.agents.length) { box.append(el('div', 'note', 'No runs counted yet.')); return; }
+  const total = u.agents.reduce((a, x) => a + x.tokens, 0) || 1;
   const tw = el('div'); tw.style.cssText = 'overflow-x:auto;margin-top:8px';
   const t = el('table'); t.style.cssText = 'width:100%;border-collapse:collapse;font-size:12.5px;font-variant-numeric:tabular-nums';
-  const hr = el('tr'); for (const h of ['Bot', 'Today', 'Month runs', 'Chat / Sched / Handoff', 'API value']) { const th = el('th', null, h); th.style.cssText = 'text-align:left;padding:6px;border-bottom:1px solid var(--line);font:600 10.5px var(--f-mono);color:var(--muted);text-transform:uppercase'; hr.append(th); } t.append(hr);
-  for (const a of u.agents) {
-    const tr = el('tr'); const k = a.kinds;
-    for (const v of [a.name, a.today, a.runs, (k.chat || 0) + ' / ' + (k.schedule || 0) + ' / ' + (k.handoff || 0), '$' + a.usd.toFixed(2)]) { const td = el('td', null, String(v)); td.style.cssText = 'padding:6px;border-bottom:1px solid var(--line)'; tr.append(td); }
+  const hr = el('tr'); for (const h of ['Bot', 'Today', 'Month runs', 'Chat / Sched / Handoff', 'Share of work']) { const th = el('th', null, h); th.style.cssText = 'text-align:left;padding:6px;border-bottom:1px solid var(--line);font:600 10.5px var(--f-mono);color:var(--muted);text-transform:uppercase'; hr.append(th); } t.append(hr);
+  for (const a of u.agents.slice().sort((x, y) => y.tokens - x.tokens)) {
+    const tr = el('tr'); const k = a.kinds; const pct = Math.round(a.tokens / total * 100);
+    for (const v of [a.name, a.today, a.runs, (k.chat || 0) + ' / ' + (k.schedule || 0) + ' / ' + (k.handoff || 0), pct + '%']) { const td = el('td', null, String(v)); td.style.cssText = 'padding:6px;border-bottom:1px solid var(--line)'; tr.append(td); }
     t.append(tr);
   }
   tw.append(t); box.append(tw);
-  if (u.since) box.append(el('div', 'note', 'Counting since ' + u.since + ' IST'));
+  box.append(el('div', 'note', '"Share of work" shows which bot uses most of your plan. Put busy bots on Sonnet and fewer connectors to save limits.'));
 }
-function alertBox(m) { $('fMsg').textContent = m; }
-async function loadTeam() {
-  const d = await (await fetch('/api/team')).json(); const c = d.cfg;
-  $('tmOn').checked = !!c.enabled; $('tmGroup').value = c.group; $('tmTrig').value = c.trigger; $('tmMembers').value = c.members; $('tmTopics').value = c.topics;
-  $('tmInt').value = String(c.interval); $('tmModel').value = c.model || 'sonnet';
-  $('tmRef').checked = !!c.refreshOn; $('tmRefTimes').value = c.refreshTimes; $('tmSources').value = c.sources;
-  $('tmRefAgent').replaceChildren(...agents.map(a => new Option(a.name, a.id))); $('tmRefAgent').value = c.refreshAgent || 'mr-c';
-  $('tmLast').textContent = 'Last refresh: ' + (c.lastRefresh || 'never');
-  $('tmMsg').textContent = d.agent ? 'Uses: ' + d.agent : 'No WhatsApp bot found. Create/rename one with "WhatsApp" in its name.';
-  const box = $('tmLog'); box.replaceChildren();
-  if (!d.log.length) { box.append(el('div', 'note', 'Team questions: none yet.')); return; }
-  box.append(el('div', 'note', 'Recent team questions:'));
-  for (const r of d.log.slice(0, 8)) { const it = el('div', 'item'); it.append(el('span', 'meta', r.t + ' · ' + r.asker + (r.blocked ? ' · blocked (not in list)' : '')), el('b', null, r.question), el('div', 'task', r.answer)); box.append(it); }
-}
-$('tmSave').onclick = () => post('/api/team', { enabled: $('tmOn').checked, group: $('tmGroup').value.trim(), trigger: $('tmTrig').value.trim() || '@Toshi',
-  members: $('tmMembers').value, topics: $('tmTopics').value, interval: Number($('tmInt').value), model: $('tmModel').value,
-  refreshOn: $('tmRef').checked, refreshTimes: $('tmRefTimes').value, sources: $('tmSources').value, refreshAgent: $('tmRefAgent').value }).then(() => { $('tmMsg').textContent = 'Saved ✓'; loadTeam(); }).catch(e => { $('tmMsg').textContent = e.message; });
-$('tmRefNow').onclick = () => post('/api/team', { action: 'refreshNow' }).then(() => { $('tmMsg').textContent = 'Refreshing… see the bot chat'; }).catch(e => { $('tmMsg').textContent = e.message; });
-$('tmNow').onclick = () => post('/api/team', { action: 'checkNow' }).then(() => { $('tmMsg').textContent = 'Checking… see WhatsApp Bot chat'; }).catch(e => { $('tmMsg').textContent = e.message; });
 async function loadSettings() {
   loadTeam().catch(() => {});
   loadUsage().catch(() => { $('usageBox').textContent = 'Usage not available.'; });
   const s = await (await fetch('/api/settings')).json();
   $('showBrowser').checked = !!s.showBrowser;
   $('autoSend').checked = s.autoSend !== false;
-  $('dayAlert').value = s.dailyAlertUsd || '';
+  $('dayAlert').value = s.dailyAlertRuns || '';
   fetch('/api/sends').then(r => r.json()).then(list => {
     const box = $('sendList'); box.replaceChildren();
     if (!list.length) { box.append(el('div', 'note', 'Recent sends: none yet.')); return; }
@@ -842,7 +823,7 @@ async function loadSettings() {
     it.append(top); fl.append(it);
   }
 }
-$('dayAlertSave').onclick = () => post('/api/settings', { action: 'dailyAlert', usd: $('dayAlert').value }).then(() => { $('saveMsg').textContent = 'Alert saved ✓'; });
+$('dayAlertSave').onclick = () => post('/api/settings', { action: 'dailyAlert', runs: $('dayAlert').value }).then(() => { $('saveMsg').textContent = 'Alert saved ✓'; });
 $('recAll').onclick = () => post('/api/settings', { action: 'recommendedAll' }).then(() => { $('saveMsg').textContent = 'Recommended connectors applied to all bots ✓'; loadSettings(); });
 $('autoSend').onchange = () => post('/api/settings', { action: 'autoSend', on: $('autoSend').checked }).catch(() => {});
 $('closeBr').onclick = () => post('/api/settings', { action: 'closeBrowsers' }).then(() => { $('closeBrMsg').textContent = 'Closed ✓'; }).catch(e => { $('closeBrMsg').textContent = e.message; });

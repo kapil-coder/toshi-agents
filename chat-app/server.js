@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.3 rev B';
+const VERSION = 'v1.3 rev C';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -393,8 +393,8 @@ function recordUsage(agent, kind, ev) {
   try { fs.appendFileSync(USAGE_FILE, JSON.stringify(row) + '\n'); } catch {}
   const today = readUsage().filter(r => r.d === row.d && r.agent === agent).length;
   const key = row.d + agent;
-  const dayUsd = readUsage().filter(r => r.d === row.d).reduce((a, r) => a + r.usd, 0), lim = Number(getSettings().dailyAlertUsd) || 0;
-  if (lim > 0 && dayUsd >= lim && !alerted.has('day' + row.d)) { alerted.add('day' + row.d); notify('Toshi Bot: usage alert', 'Today API value crossed $' + lim + ' (now $' + dayUsd.toFixed(0) + '). Max plan limits may run out sooner.'); }
+  const dayRuns = readUsage().filter(r => r.d === row.d).length, lim = Number(getSettings().dailyAlertRuns) || 0;
+  if (lim > 0 && dayRuns >= lim && !alerted.has('day' + row.d)) { alerted.add('day' + row.d); notify('Toshi Bot: busy day', dayRuns + ' bot runs today. Plan limits may run out sooner; check claude.ai > Settings > Usage.'); }
   if (today >= 40 && !alerted.has(key)) { alerted.add(key); notify('Toshi Bot: ' + agentName(agent) + ' is busy', today + ' runs today. Check its schedules if this is unexpected.'); }
 }
 function readUsage() {
@@ -866,7 +866,7 @@ const server = http.createServer(async (req, res) => {
           s.connectorsOff = s.connectorsOff || {}; for (const a of listAgents()) s.connectorsOff[a.id] = recommendedOff(a.id);
           writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
         }
-        if (b.action === 'dailyAlert') { s.dailyAlertUsd = Math.max(0, Number(b.usd) || 0); writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
+        if (b.action === 'dailyAlert') { s.dailyAlertRuns = Math.max(0, Math.round(Number(b.runs) || 0)); writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'autoSend') { s.autoSend = !!b.on; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'autoSendBot') {
           if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });
