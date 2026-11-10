@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.0 rev A';
+const VERSION = 'v1.0 rev B';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -426,6 +426,15 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
       return fs.createReadStream(path.join(PUBLIC, 'index.html')).pipe(res);
+    }
+    if (req.method === 'GET' && /^\/(icon\.svg|icon-180\.png|icon-512\.png|favicon\.ico)$/.test(url.pathname)) {
+      const f = url.pathname === '/favicon.ico' ? 'icon-180.png' : url.pathname.slice(1);
+      res.writeHead(200, { 'Content-Type': f.endsWith('.svg') ? 'image/svg+xml' : 'image/png', 'Cache-Control': 'max-age=86400' });
+      return fs.createReadStream(path.join(PUBLIC, f)).pipe(res);
+    }
+    if (req.method === 'GET' && url.pathname === '/manifest.json') {
+      return json(res, 200, { name: 'Toshi Bot', short_name: 'Toshi Bot', start_url: '/', display: 'standalone', background_color: '#16202f', theme_color: '#16202f',
+        icons: [{ src: '/icon-180.png', sizes: '180x180', type: 'image/png' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }] });
     }
     if (req.method === 'GET' && url.pathname === '/api/agents') return json(res, 200, listAgents().map(a => ({ ...a, busy: running.has(a.id), unread: !!loadChat(a.id).unread })));
     if (req.method === 'GET' && url.pathname === '/api/status') {

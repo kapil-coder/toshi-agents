@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#16202f"/>
+  <line x1="256" y1="70" x2="256" y2="128" stroke="#ffc800" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="256" cy="62" r="26" fill="#ffc800"/>
+  <rect x="96" y="128" width="320" height="250" rx="70" fill="#ffc800"/>
+  <circle cx="192" cy="240" r="34" fill="#16202f"/>
+  <circle cx="320" cy="240" r="34" fill="#16202f"/>
+  <rect x="186" y="310" width="140" height="22" rx="11" fill="#16202f"/>
+  <text x="256" y="462" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-weight="800" font-size="78" fill="#ffc800" letter-spacing="6">TOSHI</text>
+</svg>

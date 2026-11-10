@@ -6,9 +6,13 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Toshi Bot">
 <title>Toshi Bot</title>
+<link rel="icon" type="image/svg+xml" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon-180.png">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.0 rev A (10-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.0 rev B (10-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -74,6 +78,10 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .composer textarea{flex:1;min-width:0;border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px 12px;resize:none;height:44px;max-height:140px}
 .send{border:0;background:var(--accent);color:var(--accent-ink);font-weight:700;padding:0 16px;border-radius:10px;cursor:pointer}
 .send:disabled{opacity:.5;cursor:default}
+.attmenu{position:absolute;bottom:64px;left:12px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 30px -10px rgba(0,0,0,.35);padding:6px;display:grid;min-width:230px;z-index:15}
+.attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
+.attmenu button:hover{background:var(--surface-2)}
+.composer{position:relative}
 .mic{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;width:44px;cursor:pointer;font-size:18px;position:relative}
 .mic.rec{background:#c0392b;border-color:#c0392b;animation:pulse 1s infinite}
 .mic small{position:absolute;bottom:1px;right:3px;font:9px var(--f-mono);color:var(--muted)}
@@ -160,6 +168,14 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
       <form class="composer" id="form">
         <button class="clip" id="clip" type="button" title="Attach files (or drag them here)" aria-label="Attach files">📎</button>
         <input type="file" id="fileIn" multiple hidden>
+        <input type="file" id="camIn" accept="image/*" capture="environment" hidden>
+        <div class="attmenu" id="attMenu" hidden>
+          <button type="button" id="attFile">📄 Upload file / photo</button>
+          <button type="button" id="attShot">📸 Screenshot (choose screen or window)</button>
+          <button type="button" id="attMac">🖥 Mac mini screen now</button>
+          <button type="button" id="attBot">🤖 This bot's browser now</button>
+          <button type="button" id="attCam">📷 Camera</button>
+        </div>
         <button class="mic" id="mic" type="button" title="Speak your message (tap again to stop). Long-press to switch Hindi / English." aria-label="Speak message">🎤<small id="micLang">HI</small></button>
         <textarea id="inp" placeholder="Message…" aria-label="Message"></textarea>
         <button class="send" id="sendBtn" type="submit">Send</button>
@@ -326,7 +342,7 @@ async function loadChat(pre) {
   fetch('/api/seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: cur }) }).catch(() => {});
   const m = $('msgs'); m.replaceChildren();
   if (!d.messages.length) {
-    const e = el('div', 'empty'); e.append(el('b', null, 'Namaste Kapil ji'), el('span', null, 'Type a message or tap a suggestion below. Every send or delete waits for your Haan.'));
+    const e = el('div', 'empty'); e.append(el('b', null, 'Namaste Kapil ji'), el('span', null, 'Type, speak 🎤, paste or attach 📎. Bots send when you ask (auto-send); deletes still wait for your Haan.'));
     m.append(e);
   }
   for (const x of d.messages) addMsg(x.who, x.text, x.at);
@@ -413,7 +429,37 @@ async function upload(files) {
   }
   showFiles(); $('inp').focus();
 }
-$('clip').onclick = () => $('fileIn').click();
+// 📎 menu: file, screenshot, Mac screen, bot browser, camera
+$('clip').onclick = e => { e.stopPropagation(); $('attMenu').hidden = !$('attMenu').hidden; };
+document.addEventListener('click', e => { if (!$('attMenu').contains(e.target)) $('attMenu').hidden = true; });
+const stampName = p => p + '-' + new Date().toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }).replace(/[\/:, ]+/g, '-') + '.png';
+$('attFile').onclick = () => { $('attMenu').hidden = true; $('fileIn').click(); };
+$('attCam').onclick = () => { $('attMenu').hidden = true; $('camIn').click(); };
+$('camIn').onchange = () => { upload([...$('camIn').files]); $('camIn').value = ''; };
+if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) $('attShot').hidden = true; // iPhone: not available
+$('attShot').onclick = async () => {
+  $('attMenu').hidden = true;
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+    const v = document.createElement('video'); v.srcObject = stream; v.muted = true; await v.play();
+    await new Promise(r => setTimeout(r, 300));
+    const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
+    stream.getTracks().forEach(t => t.stop());
+    c.toBlob(b => upload([new File([b], stampName('screenshot'), { type: 'image/png' })]), 'image/png');
+  } catch (e) { if (e.name !== 'NotAllowedError') $('msgs').append(el('div', 'err', 'Screenshot failed: ' + e.message)); }
+};
+async function grab(url, prefix) {
+  $('attMenu').hidden = true;
+  try { const r = await fetch(url); if (!r.ok) throw new Error((await r.json()).error); const b = await r.blob(); upload([new File([b], stampName(prefix).replace('.png', '.jpg'), { type: 'image/jpeg' })]); }
+  catch (e) { $('msgs').append(el('div', 'err', e.message)); scroll(); }
+}
+$('attMac').onclick = () => grab('/api/screen?agent=' + encodeURIComponent(cur) + '&mode=mac&t=' + Date.now(), 'mac-screen');
+$('attBot').onclick = () => grab('/api/screen?agent=' + encodeURIComponent(cur) + '&t=' + Date.now(), 'bot-browser');
+// Paste: text pastes normally; pasted images/files (e.g. Cmd+Shift+Ctrl+4 screenshot) are attached
+$('inp').addEventListener('paste', e => {
+  const files = [...(e.clipboardData ? e.clipboardData.files : [])];
+  if (files.length) { e.preventDefault(); upload(files.map(f => f.name && f.name !== 'image.png' ? f : new File([f], stampName('pasted'), { type: f.type || 'image/png' }))); }
+});
 $('fileIn').onchange = () => { upload([...$('fileIn').files]); $('fileIn').value = ''; };
 const chatEl = document.querySelector('.chat');
 chatEl.addEventListener('dragover', e => { e.preventDefault(); chatEl.classList.add('drop'); });
