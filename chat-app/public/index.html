@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.6 rev A (10-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.7 rev A (10-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,12 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.asearch{display:flex;align-items:center;gap:4px;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:5px 8px;margin:2px 0 6px}
+.asearch input{border:0;background:none;outline:0;flex:1;min-width:0;font-size:14px;color:inherit;padding:0}
+.asearch button{border:0;background:none;color:var(--muted);cursor:pointer;padding:0 2px}
+.side mark{background:rgba(245,195,59,.45);color:inherit;border-radius:3px}
+.side .nores{font-size:12px;color:var(--muted);padding:6px 8px}
+.pinbtn{border:1px solid var(--line);background:none;border-radius:8px;padding:2px 8px;font-size:12px;cursor:pointer;color:inherit;margin-left:6px;vertical-align:middle}
 .queue{margin:0 16px 8px;border:1px dashed #e0b44a;background:rgba(245,195,59,.13);border-radius:10px;padding:6px 10px;font-size:13px}
 .queue .qh{font-weight:600;margin-bottom:2px}.queue .qi{display:flex;align-items:center;gap:4px;padding:3px 0;border-top:1px solid rgba(224,180,74,.35)}
 .queue .qi span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.queue .qi button{border:0;background:none;font-size:15px;padding:2px 5px;cursor:pointer;color:inherit}
@@ -186,6 +192,7 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
   .side{flex-direction:row;overflow-x:auto;border-right:0;border-bottom:1px solid var(--line);padding:8px}
   .side h4,.side .agent small,.side .live,.side .pill{display:none}
   .agent{width:auto;flex:none}
+  .asearch{flex:none;width:130px;margin:0 4px 0 0}
   .titlebar .dot{display:none}
   .m{max-width:92%}
 }
@@ -203,7 +210,7 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
     <section class="chat">
       <div class="chathead">
         <span id="hav"></span>
-        <div><b id="hname">Mr. C</b><span class="role" id="hrole"></span></div>
+        <div><b id="hname">Mr. C</b><button class="pinbtn" id="pinBtn" type="button" title="Pin this bot to the top of the list">☆ Pin</button><span class="role" id="hrole"></span></div>
         <div class="headbtns">
           <div class="mode" role="group" aria-label="Personality"><button id="fun">Fun</button><button id="pro" class="on">Pro</button></div>
           <button class="ghost" id="liveBtn" title="Live view of the Mac mini screen">🔴 Live</button>
@@ -236,7 +243,7 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
           <button type="button" id="attBot">🤖 This bot's browser now</button>
           <button type="button" id="attCam">📷 Camera</button>
         </div>
-        <button class="mic" id="mic" type="button" title="Speak your message (tap again to stop). Long-press to switch Hindi / English." aria-label="Speak message">🎤<small id="micLang">HI</small></button>
+        <button class="mic" id="mic" type="button" title="Speak your message (tap again to stop). Long-press to switch English / Hindi." aria-label="Speak message">🎤<small id="micLang">HI</small></button>
         <textarea id="inp" placeholder="Message…" aria-label="Message"></textarea>
         <button class="send" id="sendBtn" type="submit">Send</button>
         <button class="stop" id="stopBtn" type="button" title="Stop current task (queue continues)" aria-label="Stop current task" hidden>■</button>
@@ -471,12 +478,12 @@ function scroll() { const m = $('msgs'); m.scrollTop = m.scrollHeight; }
 async function loadAgents() {
   agents = await (await fetch('/api/agents')).json();
   if (!agents.some(a => a.id === cur)) cur = 'mr-c';
-  const side = $('side'); side.replaceChildren(el('h4', null, 'My agents'));
+  const side = $('side'); side.replaceChildren(el('h4', null, 'My agents · ' + agents.length), agentSearch());
   for (const a of agents) {
     const working = busyAgents.has(a.id) || a.busy;
-    const b = el('button', 'agent' + (a.id === cur ? ' on' : '') + (working ? ' work' : ''));
+    const b = el('button', 'agent' + (a.id === cur ? ' on' : '') + (working ? ' work' : '')); b.dataset.id = a.id;
     const av = botIcon(a);
-    const t = el('span'); t.append(el('b', null, a.name), el('small', null, a.description));
+    const t = el('span'); t.append(el('b', null, (a.pinned ? '⭐ ' : '') + a.name), el('small', null, a.description));
     b.append(av, t, a.unread && a.id !== cur ? el('span', 'bell', '🔔') : a.paused && !busyAgents.has(a.id) ? el('span', 'pill warn', 'Paused') : el('span', 'live' + (busyAgents.has(a.id) || a.busy ? ' busy' : '')));
     b.onclick = () => { if (cur === a.id) return; cur = a.id; attached = []; showFiles(); try { localStorage.setItem('agent', cur); } catch {} loadAgents(); };
     side.append(b);
@@ -486,13 +493,55 @@ async function loadAgents() {
   add.append(av, el('b', null, 'New agent')); add.onclick = openAdd; side.append(add);
   const au = el('button', 'agent'); const av2 = el('span', 'av', '⚙️'); av2.style.cssText = 'background:transparent;border:1px dashed var(--line)';
   au.append(av2, el('b', null, 'Settings')); au.onclick = () => openAuto('set'); side.append(au);
-  showHeader(); loadChat();
+  filterAgents(); showHeader(); loadChat();
 }
+// ---------- v1.7 agent search + pin ----------
+let agentQ = '';
+function agentSearch() {
+  let w = $('asearch'); if (w) return w;
+  w = el('div', 'asearch'); w.id = 'asearch';
+  const i = el('input'); i.id = 'agentQ'; i.type = 'text'; i.enterKeyHint = 'go'; i.placeholder = 'Search bots…'; i.setAttribute('aria-label', 'Search bots'); i.autocomplete = 'off';
+  const x = el('button', null, '✕'); x.type = 'button'; x.title = 'Clear'; x.hidden = true;
+  i.oninput = () => { agentQ = i.value.trim().toLowerCase(); x.hidden = !agentQ; filterAgents(); };
+  i.onkeydown = e => {
+    if (e.key === 'Escape') { i.value = ''; i.oninput(); i.blur(); }
+    if (e.key === 'Enter') { e.preventDefault(); const f = [...document.querySelectorAll('#side .agent[data-id]')].find(b => !b.hidden); if (f) { i.value = ''; i.oninput(); f.click(); } }
+  };
+  x.onclick = () => { i.value = ''; i.oninput(); i.focus(); };
+  w.append(el('span', null, '🔍'), i, x); return w;
+}
+function markText(node, text, q) {
+  node.replaceChildren(); const k = q ? text.toLowerCase().indexOf(q) : -1;
+  if (k < 0) { node.textContent = text; return; }
+  const m = el('mark', null, text.slice(k, k + q.length)); node.append(text.slice(0, k), m, text.slice(k + q.length));
+}
+function filterAgents() {
+  let shown = 0;
+  for (const b of document.querySelectorAll('#side .agent[data-id]')) {
+    const a = agents.find(x => x.id === b.dataset.id); if (!a) continue;
+    const hit = !agentQ || (a.name + ' ' + (a.description || '') + ' ' + a.id).toLowerCase().includes(agentQ);
+    b.hidden = !hit; if (hit) shown++;
+    markText(b.children[1].querySelector('b'), (a.pinned ? '⭐ ' : '') + a.name, agentQ); markText(b.children[1].querySelector('small'), a.description || '', agentQ);
+  }
+  const old = document.querySelector('#side .nores'); if (old) old.remove();
+  if (!shown) { const n = el('div', 'nores', 'No bot found'); $('asearch').after(n); }
+}
+document.addEventListener('keydown', e => {
+  if (e.key !== '/' || e.metaKey || e.ctrlKey) return;
+  const t = document.activeElement; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  const i = $('agentQ'); if (i) { e.preventDefault(); i.focus(); }
+});
+$('pinBtn').onclick = async () => {
+  const a = agents.find(x => x.id === cur); if (!a) return;
+  await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'pin', id: cur, on: !a.pinned }) }).catch(() => {});
+  loadAgents();
+};
 function showHeader() {
   const a = agents.find(x => x.id === cur) || agents[0];
   $('hname').textContent = a.name; $('hrole').textContent = a.description;
   { const h = botIcon(a, true); h.id = 'hav'; $('hav').replaceWith(h); }
   $('inp').placeholder = 'Message ' + a.name + '…';
+  $('pinBtn').textContent = a.pinned ? '⭐ Pinned' : '☆ Pin'; $('pinBtn').title = a.pinned ? 'Unpin' : 'Pin this bot to the top of the list';
 }
 const qSig = d => (d.queue || []).map(x => x.id + x.text.length).join(',');
 async function loadChat(pre) {
@@ -567,8 +616,8 @@ function markSide() { loadAgentsQuiet(); }
 async function loadAgentsQuiet() {
   // refresh sidebar dots without reloading the open chat
   const list = await (await fetch('/api/agents')).json();
-  document.querySelectorAll('#side .agent').forEach((b, i) => {
-    const a = list[i]; if (!a) return; const dot = b.lastChild;
+  document.querySelectorAll('#side .agent[data-id]').forEach(b => {
+    const a = list.find(x => x.id === b.dataset.id); if (!a) return; const dot = b.lastChild;
     const working = busyAgents.has(a.id) || a.busy;
     b.classList.toggle('work', !!working);
     if (a.unread && a.id !== cur && !working) { b.replaceChild(el('span', 'bell', '🔔'), dot); }
@@ -750,7 +799,7 @@ $('liveClose').onclick = () => { closeLive(); liveAuto = false; try { localStora
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   const btn = $('mic');
   if (!SR) { btn.title = "Voice not supported in this browser. Use the keyboard's 🎤 dictation key instead."; btn.style.opacity = '.4'; btn.onclick = () => { $('inp').placeholder = "Use your keyboard's 🎤 dictation key"; $('inp').focus(); }; return; }
-  let lang = 'hi-IN'; try { lang = localStorage.getItem('micLang') || 'hi-IN'; } catch {}
+  let lang = 'en-IN'; try { lang = localStorage.getItem('micLang2') || 'en-IN'; } catch {} // v1.7: default India English (Hinglish comes in Roman letters)
   const showLang = () => { $('micLang').textContent = lang === 'hi-IN' ? 'HI' : 'EN'; };
   showLang();
   let rec = null, base = '', hold = null, longPressed = false;
@@ -768,7 +817,7 @@ $('liveClose').onclick = () => { closeLive(); liveAuto = false; try { localStora
     try { rec.start(); btn.classList.add('rec'); $('inp').placeholder = lang === 'hi-IN' ? 'Boliye… (tap 🎤 to stop)' : 'Speak… (tap 🎤 to stop)'; } catch { btn.classList.remove('rec'); }
   }
   // long-press (or right-click) switches Hindi/Hinglish <-> English
-  const toggleLang = () => { lang = lang === 'hi-IN' ? 'en-IN' : 'hi-IN'; try { localStorage.setItem('micLang', lang); } catch {} showLang(); };
+  const toggleLang = () => { lang = lang === 'hi-IN' ? 'en-IN' : 'hi-IN'; try { localStorage.setItem('micLang2', lang); } catch {} showLang(); };
   btn.addEventListener('pointerdown', () => { longPressed = false; hold = setTimeout(() => { longPressed = true; toggleLang(); }, 600); });
   btn.addEventListener('pointerup', () => clearTimeout(hold));
   btn.addEventListener('pointerleave', () => clearTimeout(hold));

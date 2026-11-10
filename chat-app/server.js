@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.6 rev A';
+const VERSION = 'v1.7 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -710,8 +710,10 @@ const server = http.createServer(async (req, res) => {
         icons: [{ src: '/icon-180.png', sizes: '180x180', type: 'image/png' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }] });
     }
     if (req.method === 'GET' && url.pathname === '/api/agents') { const icons = getSettings().icons || {}; const adir = path.join(STORE, 'avatars');
-        return json(res, 200, listAgents().map(a => ({ ...a, busy: running.has(a.id), unread: !!loadChat(a.id).unread, icon: icons[a.id] || '',
-          photo: ['png', 'jpg', 'jpeg', 'webp'].some(e => fs.existsSync(path.join(adir, a.id + '.' + e))) }))); }
+        const pins = getSettings().pins || []; // v1.7: pinned bots first
+        const list = listAgents().map(a => ({ ...a, busy: running.has(a.id), unread: !!loadChat(a.id).unread, icon: icons[a.id] || '', pinned: pins.includes(a.id),
+          photo: ['png', 'jpg', 'jpeg', 'webp'].some(e => fs.existsSync(path.join(adir, a.id + '.' + e))) }));
+        return json(res, 200, [...list.filter(a => a.pinned), ...list.filter(a => !a.pinned)]); }
     if (req.method === 'GET' && url.pathname === '/api/status') {
       return json(res, 200, {
         app: VERSION, claude: claudeVersion, host: os.hostname(), uptime: os.uptime(),
@@ -975,6 +977,10 @@ const server = http.createServer(async (req, res) => {
           if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });
           s.icons = s.icons || {}; if (b.icon) s.icons[b.id] = String(b.icon).slice(0, 20); else delete s.icons[b.id];
           writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
+        }
+        if (b.action === 'pin') {
+          if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });
+          const p = (s.pins || []).filter(x => x !== b.id && validAgent(x)); if (b.on) p.push(b.id); s.pins = p; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
         }
         if (b.action === 'ownBrowser') {
           if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });

@@ -24,6 +24,17 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
   try {
     await p.goto(`http://localhost:${PORT}`); await p.waitForTimeout(1000);
     check((await p.locator('#side .agent').count()) >= 3, 'Sidebar shows agents');
+    // v1.7 search + pin
+    await p.fill('#agentQ', 'linkedin'); await p.waitForTimeout(200);
+    const vis = await p.locator('#side .agent[data-id]:visible').count();
+    check(vis === 1 && (await p.locator('#side mark').count()) > 0, 'Agent search filters + highlights');
+    await p.fill('#agentQ', 'zzzz'); await p.waitForTimeout(150); check(await p.isVisible('#side .nores'), 'Agent search: no result note');
+    await p.fill('#agentQ', ''); await p.waitForTimeout(150);
+    await p.click('#side .agent[data-id="linkedin-desk"]'); await p.waitForTimeout(800); await p.click('#pinBtn'); await p.waitForTimeout(900);
+    check((await p.getAttribute('#side .agent[data-id]', 'data-id')) === 'linkedin-desk' && (await p.textContent('#pinBtn')).includes('Pinned'), 'Pin moves bot to top');
+    await p.click('#pinBtn'); await p.waitForTimeout(700);
+    await p.click('#side .agent[data-id="mr-c"]'); await p.waitForTimeout(800);
+    check((await p.textContent('#micLang')) === 'EN', 'Mic default is EN');
     check(/v\d/.test(await p.textContent('#title')), 'Title shows version');
     await p.fill('#inp', 'hello'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
     check((await p.textContent('#msgs')).includes('Smoke test reply'), 'Chat send + reply works');
