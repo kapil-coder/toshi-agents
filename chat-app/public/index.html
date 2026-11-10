@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.0 rev C (10-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.0 rev D (10-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -265,6 +265,8 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
       <div class="note">Gets the latest version from GitHub and restarts. Takes about 10 seconds.</div>
       <h4 style="margin:10px 0 0">Bot computers</h4>
       <div class="opts"><label><input type="checkbox" id="showBrowser"> Show bot browser windows on the Mac screen (normally hidden; watch them in 🔴 Live)</label></div>
+      <div class="btns"><button class="btn" id="closeBr" type="button">🧹 Close bot browsers</button><span class="msg" id="closeBrMsg"></span></div>
+      <div class="note">Closes all bot Chrome windows (your own Chrome stays). They reopen hidden on the next bot task; logins are kept.</div>
       <h4 style="margin:10px 0 0">Phone notifications (free ntfy app)</h4>
       <div class="note">1. Install <b>ntfy</b> on iPhone (App Store). 2. Tap + and subscribe to the topic below. 3. Turn on and press Test. Only a short line like "LinkedIn Desk finished" is sent, never your data.</div>
       <div class="f2">
@@ -736,6 +738,7 @@ async function loadSettings() {
   }
 }
 $('autoSend').onchange = () => post('/api/settings', { action: 'autoSend', on: $('autoSend').checked }).catch(() => {});
+$('closeBr').onclick = () => post('/api/settings', { action: 'closeBrowsers' }).then(() => { $('closeBrMsg').textContent = 'Closed ✓'; }).catch(e => { $('closeBrMsg').textContent = e.message; });
 $('showBrowser').onchange = () => post('/api/settings', { action: 'showBrowser', on: $('showBrowser').checked }).catch(() => {});
 $('nSave').onclick = () => post('/api/settings', { action: 'notify', notify: $('nOn').checked, ntfyTopic: $('nTopic').value.trim() }).then(() => { $('nMsg').textContent = 'Saved ✓'; }).catch(e => { $('nMsg').textContent = e.message; });
 $('nTest').onclick = () => post('/api/settings', { action: 'notify', notify: true, ntfyTopic: $('nTopic').value.trim() }).then(() => { $('nOn').checked = true; return post('/api/settings', { action: 'test' }); }).then(() => { $('nMsg').textContent = 'Test sent. Check your iPhone.'; }).catch(e => { $('nMsg').textContent = e.message; });

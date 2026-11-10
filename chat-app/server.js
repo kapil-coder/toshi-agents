@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.0 rev C';
+const VERSION = 'v1.0 rev D';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -630,6 +630,15 @@ const server = http.createServer(async (req, res) => {
           if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });
           const m = String(b.model || ''); if (m && !['opus', 'sonnet', 'haiku'].includes(m)) return json(res, 400, { error: 'Unknown model.' });
           s.models = s.models || {}; if (m) s.models[b.id] = m; else delete s.models[b.id]; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
+        }
+        if (b.action === 'closeBrowsers') {
+          // close every bot Chrome (they restart hidden on the next bot task); never touches Kapil's own Chrome
+          if (running.size) return json(res, 409, { error: 'A bot is working right now. Try again when it finishes.' });
+          return execFile('pkill', ['-f', '.toshi-agents/chrome-profile'], () => {
+            for (const dir of [path.join(os.homedir(), '.toshi-agents', 'chrome-profile'), ...(() => { try { return fs.readdirSync(path.join(os.homedir(), '.toshi-agents', 'chrome-profiles')).map(d => path.join(os.homedir(), '.toshi-agents', 'chrome-profiles', d)); } catch { return []; } })()])
+              try { fs.unlinkSync(path.join(dir, '.toshi-port')); } catch {}
+            json(res, 200, { ok: true });
+          });
         }
         if (b.action === 'ownBrowser') {
           if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });
