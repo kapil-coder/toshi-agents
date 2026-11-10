@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.1 rev A (10-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.2 rev A (10-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -289,6 +289,23 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
         <div class="fld"><span class="lbl">Status</span><div class="opts"><label><input type="checkbox" id="nOn"> Notifications on</label></div></div>
       </div>
       <div class="btns"><button class="btn pri" id="nSave" type="button">Save</button><button class="btn" id="nTest" type="button">Send test</button><span class="msg" id="nMsg"></span></div>
+      <h4 style="margin:10px 0 0">👥 Team Desk on WhatsApp</h4>
+      <div class="note">Team asks in a WhatsApp group, starting with the trigger word. Answers come only from files in iCloud Drive → ToshiAgents → <b>team-info</b> (FAQ, price list, order status sheets). No internet, email, Zoho or other bots for the team.</div>
+      <div class="opts"><label><input type="checkbox" id="tmOn"> Team Desk ON</label></div>
+      <div class="f2">
+        <div class="fld"><label for="tmGroup">WhatsApp group name (exact)</label><input type="text" id="tmGroup"></div>
+        <div class="fld"><label for="tmTrig">Trigger word</label><input type="text" id="tmTrig"></div>
+      </div>
+      <div class="f2">
+        <div class="fld"><label for="tmMembers">Team members (one per line: Name, 91number)</label><textarea id="tmMembers" rows="4" placeholder="Ravi, 919800000000"></textarea></div>
+        <div class="fld"><label for="tmTopics">Allowed topics</label><textarea id="tmTopics" rows="4" placeholder="order and quotation status, stock, catalogue and prices, delivery dates, company FAQ"></textarea></div>
+      </div>
+      <div class="f2">
+        <div class="fld"><label for="tmInt">Check WhatsApp every</label><select id="tmInt"><option value="60">1 minute</option><option value="120">2 minutes</option><option value="300">5 minutes</option><option value="900">15 minutes</option></select></div>
+        <div class="fld"><label for="tmModel">Team Desk model</label><select id="tmModel"><option value="sonnet">Sonnet (saves limits)</option><option value="haiku">Haiku (lightest)</option><option value="opus">Opus</option></select></div>
+      </div>
+      <div class="btns"><button class="btn pri" id="tmSave" type="button">Save Team Desk</button><button class="btn" id="tmNow" type="button">Check group now</button><span class="msg" id="tmMsg"></span></div>
+      <div class="list" id="tmLog"></div>
       <h4 style="margin:10px 0 0">✉️ Auto-send</h4>
       <div class="opts"><label><input type="checkbox" id="autoSend"> Bots send email / WhatsApp directly when asked (no Haan card)</label></div>
       <div class="note">Turn OFF here any time = emergency stop for all bots. Deletes, file shares and payments still ask. Zoho stays read-only.</div>
@@ -714,7 +731,21 @@ async function loadUsage() {
   if (u.since) box.append(el('div', 'note', 'Counting since ' + u.since + ' IST'));
 }
 function alertBox(m) { $('fMsg').textContent = m; }
+async function loadTeam() {
+  const d = await (await fetch('/api/team')).json(); const c = d.cfg;
+  $('tmOn').checked = !!c.enabled; $('tmGroup').value = c.group; $('tmTrig').value = c.trigger; $('tmMembers').value = c.members; $('tmTopics').value = c.topics;
+  $('tmInt').value = String(c.interval); $('tmModel').value = c.model || 'sonnet';
+  $('tmMsg').textContent = d.agent ? 'Uses: ' + d.agent : 'No WhatsApp bot found. Create/rename one with "WhatsApp" in its name.';
+  const box = $('tmLog'); box.replaceChildren();
+  if (!d.log.length) { box.append(el('div', 'note', 'Team questions: none yet.')); return; }
+  box.append(el('div', 'note', 'Recent team questions:'));
+  for (const r of d.log.slice(0, 8)) { const it = el('div', 'item'); it.append(el('span', 'meta', r.t + ' · ' + r.asker + (r.blocked ? ' · blocked (not in list)' : '')), el('b', null, r.question), el('div', 'task', r.answer)); box.append(it); }
+}
+$('tmSave').onclick = () => post('/api/team', { enabled: $('tmOn').checked, group: $('tmGroup').value.trim(), trigger: $('tmTrig').value.trim() || '@Toshi',
+  members: $('tmMembers').value, topics: $('tmTopics').value, interval: Number($('tmInt').value), model: $('tmModel').value }).then(() => { $('tmMsg').textContent = 'Saved ✓'; loadTeam(); }).catch(e => { $('tmMsg').textContent = e.message; });
+$('tmNow').onclick = () => post('/api/team', { action: 'checkNow' }).then(() => { $('tmMsg').textContent = 'Checking… see WhatsApp Bot chat'; }).catch(e => { $('tmMsg').textContent = e.message; });
 async function loadSettings() {
+  loadTeam().catch(() => {});
   loadUsage().catch(() => { $('usageBox').textContent = 'Usage not available.'; });
   const s = await (await fetch('/api/settings')).json();
   $('showBrowser').checked = !!s.showBrowser;

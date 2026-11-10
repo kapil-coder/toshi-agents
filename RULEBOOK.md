@@ -1,6 +1,6 @@
 # Toshi Bot: Golden Rule Book
 
-Version: v0.4 rev D | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
+Version: v0.4 rev E | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
 
 This rule book applies to every Toshi Bot agent run with Claude Code on the Mac mini. (Product renamed from "Toshi Agents" to "Toshi Bot" on 09-11-2026; folder and repo names stay toshi-agents.)
 Each agent's own charter (kept privately in iCloud) adds detail. If they disagree, the stricter rule wins.
@@ -13,12 +13,12 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Claude Code | 2.1.x (keep updated with `claude update`) |
 | Node.js | Current LTS (needed for the browser tool) |
 | Playwright MCP (browser tool) | 0.0.83 (pinned), connects to each bot's hidden Chrome via scripts/browser-mcp.sh v0.9 rev B |
-| Rule book | v0.4 rev D |
+| Rule book | v0.4 rev E |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
 | Guard hook | v0.4 rev B |
-| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live) | v1.1 rev A |
+| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk) | v1.2 rev A |
 
 ## 2. Rules for every agent
 
@@ -73,6 +73,13 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 - Every send is logged (Settings → Recent sends) and announced on the phone (🔔, no message content).
 - Still need Kapil's Haan: deletes, trash, spam marks, file shares, Apollo writes, payments, bids. Zoho stays read-only.
 
+## 4e. Team Desk on WhatsApp (v1.2, decision 10-11-2026)
+
+- Team members ask in one WhatsApp group with the trigger word (default "@Toshi"). Only numbers in Kapil's team list get answers.
+- Answers come from a locked-down run (chat-app/team-ask.js): it can only READ iCloud/ToshiAgents/team-info. No internet, commands, email, WhatsApp, Zoho or other bots.
+- Never shared with the team: customer phone/emails, bank details, salaries, investor/financial figures, passwords, anything outside the allowed topics.
+- WhatsApp Bot only collects the questions and posts the given answers. Every Q&A is logged (Settings → Team Desk).
+
 ## 4c. Handoffs between agents (v0.8, decision 09-11-2026)
 
 - Any agent may pass work to another agent (`node chat-app/handoff.js`). Kapil relaxed the old rule so LinkedIn Desk and others can hand WhatsApp work to the WhatsApp agent.
@@ -109,6 +116,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v0.4 rev E | 10-11-2026 | App v1.2 rev A: Team Desk on WhatsApp (option A), locked-down answers from team-info only. |
 | v0.4 rev D | 10-11-2026 | App v1.1 rev A: 🖱 Control in Live (click, type, keys, scroll, open website) inside the bot's browser; Start browser button for logins. |
 | v0.4 rev C | 10-11-2026 | Decision 8: shared browser, all-bots always-allow, read-only lookups without card (guard v0.4 rev B, app v1.0 rev C). |
 | v0.4 rev B | 10-11-2026 | App v1.0 rev B: Toshi Bot icon, paste images/files into the message box, 📎 menu (file, screenshot, Mac screen, bot browser, camera). |
