@@ -1,5 +1,6 @@
 #!/bin/bash
-# Toshi Bot guard hook v0.4 rev B (10-11-2026)
+# Toshi Bot guard hook v0.5 rev A (10-11-2026)
+# v0.5: Prabhu ToshiCrm connector tools allowed (Kapil option B: read + create/update; the connector has no delete tool).
 # v0.4 rev B: read-only lookups of any connector run without a card (Kapil's explicit yes, 10-11-2026).
 # v0.4: TOSHI_AUTOSEND=1 (Kapil's decision 10-11-2026) lets bots send email/WhatsApp/replies without the Haan card.
 # Runs before every MCP tool call (PreToolUse).
@@ -51,6 +52,11 @@ if [ "$TOSHI_STRICT_SEND" = "1" ]; then
       printf '%s' "$input" | grep -Eiq '"element"[[:space:]]*:[[:space:]]*"[^"]*send' && decide ask "WhatsApp send needs Kapil's Haan ($tool)";;
   esac
 fi
+
+# 2c. Prabhu ToshiCrm (in-house CRM): all connector tools allowed (no delete tool exists in it)
+case "$t" in
+  mcp__toshicrm__*) decide allow "ToshiCrm (option B, Kapil 10-11-2026): $tool";;
+esac
 
 # 3. Outgoing or destructive: ask Kapil
 if printf '%s' "$t" | grep -Eq 'send|reply|forward|trash|delete|spam|share_file'; then

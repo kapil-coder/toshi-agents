@@ -2,7 +2,15 @@
   "mcpServers": {
     "playwright": {
       "command": "bash",
-      "args": ["${HOME}/toshi-agents/scripts/browser-mcp.sh"]
+      "args": [
+        "${HOME}/toshi-agents/scripts/browser-mcp.sh"
+      ]
+    },
+    "toshicrm": {
+      "command": "node",
+      "args": [
+        "${HOME}/toshi-agents/chat-app/toshicrm-mcp.js"
+      ]
     }
   }
 }

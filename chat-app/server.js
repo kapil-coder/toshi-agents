@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.3 rev E';
+const VERSION = 'v1.4 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -634,7 +634,7 @@ function learnConnectors(tools) {
   servers.forEach(x => known.add(x)); if (known.size !== before) { s.knownConnectors = [...known].sort(); writeJSON(SETTINGS_FILE, s); }
 }
 function connectorsOff(agent) { return ((getSettings().connectorsOff || {})[agent] || []).filter(x => /^mcp__[\w-]+$/.test(x)); }
-const RECOMMENDED = /playwright|gmail|google|zoho|apollo/i;
+const RECOMMENDED = /playwright|gmail|google|zoho|apollo|toshicrm/i;
 function recommendedOff(agent) {
   const known = getSettings().knownConnectors || [];
   const wa = /whatsapp|diwali/i.test(agent + ' ' + agentName(agent));
