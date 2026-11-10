@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.4 rev B';
+const VERSION = 'v1.4 rev C';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -843,6 +843,8 @@ const server = http.createServer(async (req, res) => {
         json(res, e ? 400 : 200, { ok: !e, msg: String(out || (e && e.message) || '').trim().slice(0, 300) }));
       if (b.action === 'test') return test();
       if (!/^[A-Za-z0-9._\-]{20,}$/.test(k)) return json(res, 400, { error: 'That does not look like a Supabase secret key.' });
+      if (/^sb_publishable_/.test(k) || (() => { try { return JSON.parse(Buffer.from(k.split('.')[1], 'base64url').toString()).role !== 'service_role'; } catch { return false; } })())
+        return json(res, 400, { error: 'This is the PUBLIC (anon/publishable) key. Copy the SECRET key (service_role / sb_secret_…) instead.' });
       if (process.platform !== 'darwin') return json(res, 400, { error: 'Keychain is only on the Mac.' });
       return execFile('security', ['add-generic-password', '-U', '-s', 'toshicrm-supabase', '-a', 'toshibot', '-w', k], err => err ? json(res, 500, { error: 'Could not save to Keychain.' }) : test());
     }

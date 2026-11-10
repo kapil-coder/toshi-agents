@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Toshi Bot · Prabhu ToshiCrm connector (MCP server) v1.0 rev A (10-11-2026)
+// Toshi Bot · Prabhu ToshiCrm connector (MCP server) v1.0 rev B (10-11-2026)
 // Gives every bot clear CRM tools over Supabase (project "toshicrm").
 // Option B (Kapil, 10-11-2026): read + create/update. There is NO delete tool.
 // Secret key: macOS Keychain item "toshicrm-supabase" (set with scripts/toshicrm-key.sh). Never stored in git.
@@ -8,6 +8,13 @@ const https = require('https');
 const { execFileSync } = require('child_process');
 
 const URL_BASE = process.env.TOSHICRM_URL || 'https://ylmgucvpmvzpgcvaqhgq.supabase.co';
+// v1.0 rev B: tell a public (anon/publishable) key apart from the secret key — the public key returns EMPTY results under RLS
+function keyKind(k) {
+  if (!k) return 'none';
+  if (/^sb_publishable_/.test(k)) return 'public';
+  if (/^sb_secret_/.test(k)) return 'secret';
+  try { const p = JSON.parse(Buffer.from(k.split('.')[1], 'base64url').toString()); return p.role === 'service_role' ? 'secret' : 'public'; } catch { return 'unknown'; }
+}
 function key() {
   if (process.env.TOSHICRM_KEY) return process.env.TOSHICRM_KEY;
   try { return execFileSync('security', ['find-generic-password', '-s', 'toshicrm-supabase', '-w'], { encoding: 'utf8' }).trim(); } catch { return ''; }
@@ -16,7 +23,8 @@ function key() {
 // ---------- tiny PostgREST client ----------
 function rest(method, table, query, body, prefer) {
   return new Promise((resolve, reject) => {
-    const k = key(); if (!k) return reject(new Error('ToshiCrm key not set. On the Mac run: ~/toshi-agents/scripts/toshicrm-key.sh'));
+    const k = key(); if (!k) return reject(new Error('ToshiCrm key not set. Toshi Bot → Settings → Prabhu ToshiCrm → paste the SECRET key.'));
+    if (keyKind(k) === 'public') return reject(new Error('The saved ToshiCrm key is the PUBLIC (anon/publishable) key, so the CRM shows nothing. Save the SECRET (service_role) key in Settings.'));
     const u = new URL(URL_BASE + '/rest/v1/' + table + (query ? '?' + query : ''));
     const lib = u.protocol === 'http:' ? require('http') : https;
     const req = lib.request(u, { method, headers: { apikey: k, Authorization: 'Bearer ' + k, 'Content-Type': 'application/json', Prefer: prefer || 'return=representation' } }, res => {
@@ -90,7 +98,9 @@ tool('update_deal', 'Update a deal\'s stage (Cold, Warm, Hot, Negotiation/Review
 
 // ---------- quick self-test: node chat-app/toshicrm-mcp.js --test ----------
 if (process.argv.includes('--test')) {
-  rest('GET', 'accounts', 'select=name&deleted_at=is.null&limit=1').then(r => { console.log('ToshiCrm connection OK ✓ (sample account: ' + ((r[0] || {}).name || 'none') + ')'); process.exit(0); })
+  rest('GET', 'accounts', 'select=name&deleted_at=is.null&limit=1').then(r => {
+      if (!r.length) { console.log('Connected, but the CRM shows NO data: this is not the secret key (or the CRM is empty). Save the SECRET (service_role) key.'); process.exit(1); }
+      console.log('ToshiCrm connection OK ✓ (sample account: ' + r[0].name + ')'); process.exit(0); })
     .catch(e => { console.log('ToshiCrm connection FAILED: ' + e.message); process.exit(1); });
 } else {
 // ---------- MCP over stdio (newline-delimited JSON-RPC) ----------
