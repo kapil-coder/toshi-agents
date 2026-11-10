@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.2 rev B';
+const VERSION = 'v1.3 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -97,14 +97,23 @@ function runClaude(agent, message, opts, onEvent) {
   if (agent !== 'mr-c') args.push('--agent', agent);
   const model = (getSettings().models || {})[agent];
   if (['opus', 'sonnet', 'haiku'].includes(model)) args.push('--model', model); // per-bot model (v0.9 rev D)
+  // v1.3 auto-fresh: after 15 runs in one session, start a new session carrying only the last few messages (saves tokens)
+  let freshNote = '';
+  if (chat.sessionId && (chat.sessionRuns || 0) >= FRESH_AFTER) {
+    const recent = chat.messages.slice(-7, -1).map(m => (m.who === 'me' ? 'Kapil: ' : 'You: ') + String(m.text).slice(0, 600)).join('\n');
+    freshNote = 'Context (new session to save tokens; recent messages from this chat):\n' + recent + '\n\nNew message:\n';
+    chat.sessionId = null; chat.sessionRuns = 0; saveChat(agent, chat);
+  }
   if (chat.sessionId) args.push('--resume', chat.sessionId);
+  // v1.3 connectors per bot: switched-off connectors are not loaded for this bot
+  const off = connectorsOff(agent); if (off.length) args.push('--disallowedTools', ...off);
   const allow = [...new Set([...(chat.allow || []), ...(getSettings().allowAll || []), ...(opts.allowOnce || [])])]; // allowAll = approved once for all bots
   if (allow.length) args.push('--allowedTools', ...allow);
   const tone = opts.tone === 'fun'
     ? 'Tone for this chat: Fun, witty and cheeky (Grok style), still accurate and brief. Hinglish with "aap".'
     : 'Tone for this chat: Professional, brief, bullet points. Hinglish with "aap" when talking to Kapil.';
   args.push('--append-system-prompt', tone + ' Your name in the Toshi Bot app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.');
-  args.push('--', message);
+  args.push('--', freshNote + message);
 
   // Tools Kapil approved with Haan for this run: the guard hook allows exactly these
   // Own browser per agent (LinkedIn Desk and Mr. C keep the shared profile with the LinkedIn login)
@@ -126,6 +135,7 @@ function runClaude(agent, message, opts, onEvent) {
       if (!line) continue;
       let ev; try { ev = JSON.parse(line); } catch { continue; }
       if (ev.session_id) sessionId = ev.session_id;
+      if (ev.type === 'system' && ev.subtype === 'init' && Array.isArray(ev.tools)) learnConnectors(ev.tools);
       if (ev.type === 'assistant' && ev.message && Array.isArray(ev.message.content)) {
         for (const c of ev.message.content) {
           if (c.type === 'text' && c.text.trim()) { finalText.push(c.text); onEvent({ t: 'text', v: c.text }); }
@@ -144,7 +154,8 @@ function runClaude(agent, message, opts, onEvent) {
   child.on('close', code => {
     running.delete(agent);
     const c = loadChat(agent);
-    c.sessionId = sessionId;
+    if (c.sessionId !== sessionId) c.sessionRuns = 0;
+    c.sessionId = sessionId; c.sessionRuns = (c.sessionRuns || 0) + 1;
     if (finalText.length) c.messages.push({ who: 'bot', text: finalText.join('\n\n'), at: stamp() });
     if (denials.length) c.pending = denials; else delete c.pending;
     saveChat(agent, c);
@@ -382,6 +393,8 @@ function recordUsage(agent, kind, ev) {
   try { fs.appendFileSync(USAGE_FILE, JSON.stringify(row) + '\n'); } catch {}
   const today = readUsage().filter(r => r.d === row.d && r.agent === agent).length;
   const key = row.d + agent;
+  const dayUsd = readUsage().filter(r => r.d === row.d).reduce((a, r) => a + r.usd, 0), lim = Number(getSettings().dailyAlertUsd) || 0;
+  if (lim > 0 && dayUsd >= lim && !alerted.has('day' + row.d)) { alerted.add('day' + row.d); notify('Toshi Bot: usage alert', 'Today API value crossed $' + lim + ' (now $' + dayUsd.toFixed(0) + '). Max plan limits may run out sooner.'); }
   if (today >= 40 && !alerted.has(key)) { alerted.add(key); notify('Toshi Bot: ' + agentName(agent) + ' is busy', today + ' runs today. Check its schedules if this is unexpected.'); }
 }
 function readUsage() {
@@ -587,6 +600,24 @@ function refreshTick() {
   }
 }
 setInterval(refreshTick, 30000);
+
+
+// ---------- v1.3: connectors per bot ----------
+const FRESH_AFTER = 15;
+function learnConnectors(tools) {
+  const servers = [...new Set(tools.map(t => (String(t).match(/^(mcp__[^_].*?)__/) || [])[1]).filter(Boolean))].sort();
+  if (!servers.length) return;
+  const s = getSettings(); const known = new Set(s.knownConnectors || []); const before = known.size;
+  servers.forEach(x => known.add(x)); if (known.size !== before) { s.knownConnectors = [...known].sort(); writeJSON(SETTINGS_FILE, s); }
+}
+function connectorsOff(agent) { return ((getSettings().connectorsOff || {})[agent] || []).filter(x => /^mcp__[\w-]+$/.test(x)); }
+const RECOMMENDED = /playwright|gmail|google|zoho|apollo/i;
+function recommendedOff(agent) {
+  const known = getSettings().knownConnectors || [];
+  const wa = /whatsapp|diwali/i.test(agent + ' ' + agentName(agent));
+  return known.filter(x => wa ? !/playwright/i.test(x) : !RECOMMENDED.test(x));
+}
+const connectorLabel = x => x.replace(/^mcp__/, '').replace(/^claude_ai_/, '').replace(/_/g, ' ');
 
 // ---------- server ----------
 const PUBLIC = path.join(__dirname, 'public');
@@ -827,6 +858,15 @@ const server = http.createServer(async (req, res) => {
           s.ownBrowser = s.ownBrowser || {}; s.ownBrowser[b.id] = !!b.on; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
         }
         if (b.action === 'removeAllow') { s.allowAll = (s.allowAll || []).filter(t => t !== b.tool); writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
+        if (b.action === 'connectors') {
+          if (!validAgent(b.id) || !Array.isArray(b.off)) return json(res, 400, { error: 'Bad request' });
+          s.connectorsOff = s.connectorsOff || {}; s.connectorsOff[b.id] = b.off.filter(x => /^mcp__[\w-]+$/.test(x)); writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
+        }
+        if (b.action === 'recommendedAll') {
+          s.connectorsOff = s.connectorsOff || {}; for (const a of listAgents()) s.connectorsOff[a.id] = recommendedOff(a.id);
+          writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
+        }
+        if (b.action === 'dailyAlert') { s.dailyAlertUsd = Math.max(0, Number(b.usd) || 0); writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'autoSend') { s.autoSend = !!b.on; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'autoSendBot') {
           if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });

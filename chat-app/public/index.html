@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.2 rev B (10-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.3 rev A (10-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -320,6 +320,13 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
       <h4 style="margin:10px 0 0">📊 Usage</h4>
       <div id="usageBox"><div class="note">Loading…</div></div>
       <div class="note">Your Max plan covers this: no extra money. "API value" shows what the same work would cost on pay-per-use, so you can see which bot works most. Plan limits: claude.ai → Settings → Usage.</div>
+      <h4 style="margin:10px 0 0">💡 Save limits</h4>
+      <div class="f2">
+        <div class="fld"><label for="dayAlert">Phone alert when today's API value crosses ($, 0 = off)</label><input type="text" id="dayAlert" placeholder="100"></div>
+        <div class="fld" style="align-content:end"><div class="btns"><button class="btn" id="dayAlertSave" type="button">Save alert</button><button class="btn pri" id="recAll" type="button">Apply recommended connectors to all bots</button></div></div>
+      </div>
+      <div class="note">Each bot loads only the connectors ticked for it (tap "Connectors" on a bot below). Recommended: WhatsApp bots = browser only; others = browser, Gmail, Google, Zoho, Apollo. Chats also start fresh automatically after 15 messages.</div>
+      <div class="msg" id="saveMsg"></div>
       <h4 style="margin:10px 0 0">My agents</h4>
       <div class="list" id="agentList"></div>
       <div class="note">Delete moves the agent to an archive folder (not lost). Its chat history stays in iCloud. Built-in agents can't be deleted.</div>
@@ -762,6 +769,7 @@ async function loadSettings() {
   const s = await (await fetch('/api/settings')).json();
   $('showBrowser').checked = !!s.showBrowser;
   $('autoSend').checked = s.autoSend !== false;
+  $('dayAlert').value = s.dailyAlertUsd || '';
   fetch('/api/sends').then(r => r.json()).then(list => {
     const box = $('sendList'); box.replaceChildren();
     if (!list.length) { box.append(el('div', 'note', 'Recent sends: none yet.')); return; }
@@ -784,6 +792,19 @@ async function loadSettings() {
     obc.checked = !(s.shared || {})[a.id]; obc.title = 'Own browser = separate logins (e.g. WhatsApp Web). Off = shared browser with your Google/LinkedIn login.';
     obc.onchange = () => post('/api/settings', { action: 'ownBrowser', id: a.id, on: obc.checked }).catch(() => {});
     obl.append(obc, document.createTextNode('Own browser')); top.append(obl);
+    const cb = el('button', 'btn', 'Connectors (' + ((s.knownConnectors || []).length - ((s.connectorsOff || {})[a.id] || []).length) + '/' + (s.knownConnectors || []).length + ')');
+    cb.onclick = () => {
+      if (it.querySelector('.connbox')) { it.querySelector('.connbox').remove(); return; }
+      const box = el('div', 'opts connbox'); box.style.marginTop = '6px';
+      if (!(s.knownConnectors || []).length) box.append(el('span', 'note', 'Connectors appear here after any bot runs once.'));
+      for (const x of s.knownConnectors || []) {
+        const l = el('label'); const i = el('input'); i.type = 'checkbox'; i.checked = !((s.connectorsOff || {})[a.id] || []).includes(x);
+        i.onchange = () => { const off = [...box.querySelectorAll('input')].filter(z => !z.checked).map(z => z.value); post('/api/settings', { action: 'connectors', id: a.id, off }).then(() => { s.connectorsOff = s.connectorsOff || {}; s.connectorsOff[a.id] = off; cb.textContent = 'Connectors (' + (s.knownConnectors.length - off.length) + '/' + s.knownConnectors.length + ')'; }); };
+        i.value = x; l.append(i, document.createTextNode(x.replace(/^mcp__/, '').replace(/^claude_ai_/, '').replace(/_/g, ' '))); box.append(l);
+      }
+      it.append(box);
+    };
+    top.append(cb);
     ms.onchange = () => post('/api/settings', { action: 'model', id: a.id, model: ms.value }).catch(e => { alertBox(e.message); });
     top.append(ms);
     {
@@ -816,6 +837,8 @@ async function loadSettings() {
     it.append(top); fl.append(it);
   }
 }
+$('dayAlertSave').onclick = () => post('/api/settings', { action: 'dailyAlert', usd: $('dayAlert').value }).then(() => { $('saveMsg').textContent = 'Alert saved ✓'; });
+$('recAll').onclick = () => post('/api/settings', { action: 'recommendedAll' }).then(() => { $('saveMsg').textContent = 'Recommended connectors applied to all bots ✓'; loadSettings(); });
 $('autoSend').onchange = () => post('/api/settings', { action: 'autoSend', on: $('autoSend').checked }).catch(() => {});
 $('closeBr').onclick = () => post('/api/settings', { action: 'closeBrowsers' }).then(() => { $('closeBrMsg').textContent = 'Closed ✓'; }).catch(e => { $('closeBrMsg').textContent = e.message; });
 $('showBrowser').onchange = () => post('/api/settings', { action: 'showBrowser', on: $('showBrowser').checked }).catch(() => {});
