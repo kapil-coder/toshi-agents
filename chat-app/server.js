@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.3 rev D';
+const VERSION = 'v1.3 rev E';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -642,6 +642,25 @@ function recommendedOff(agent) {
 }
 const connectorLabel = x => x.replace(/^mcp__/, '').replace(/^claude_ai_/, '').replace(/_/g, ' ');
 
+
+// ---------- update safety check (v1.3 rev E) ----------
+// Before restarting into a freshly pulled version: syntax-check server + page script and make sure key screens' code exists.
+function checkNewVersion() {
+  try {
+    const cp = require('child_process');
+    cp.execFileSync(process.execPath, ['--check', path.join(PROJECT, 'chat-app', 'server.js')], { stdio: 'pipe' });
+    const html = fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8');
+    const js = (html.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
+    const f = path.join(os.tmpdir(), 'toshi-page-check.js'); fs.writeFileSync(f, js);
+    cp.execFileSync(process.execPath, ['--check', f], { stdio: 'pipe' });
+    const defined = new Set([...js.matchAll(/(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(|(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=/g)].map(m => m[1] || m[2]));
+    for (const fn of ['loadAgents', 'loadChat', 'loadSettings', 'loadTeam', 'loadUsage', 'loadSched', 'send']) if (!defined.has(fn)) return 'missing ' + fn;
+    // every loadXxx() / openXxx() the page calls must exist
+    for (const m of js.matchAll(/\b((?:load|open|close)[A-Z]\w*)\s*\(/g)) if (!defined.has(m[1])) return 'missing ' + m[1];
+    return '';
+  } catch (e) { return String(e.stderr || e.message).split('\n').find(Boolean).slice(0, 160) || 'syntax error'; }
+}
+
 // ---------- server ----------
 const PUBLIC = path.join(__dirname, 'public');
 const server = http.createServer(async (req, res) => {
@@ -789,12 +808,17 @@ const server = http.createServer(async (req, res) => {
       const git = (args, cb) => execFile('git', args, { cwd: PROJECT, timeout: 60000 }, (e, out, err) => cb(e, String(out || ''), String(err || '')));
       return git(['status', '--porcelain', '--untracked-files=no'], (e0, changed) => {
         const files = changed.split('\n').filter(l => l.trim()).map(l => l.slice(3).trim());
-        const go = () => git(['pull', '--ff-only'], (e, out, err) => {
+        const go = () => git(['rev-parse', 'HEAD'], (eh, oldHead) => git(['pull', '--ff-only'], (e, out, err) => {
           if (e) return json(res, 500, { error: 'Update failed: ' + (err || e.message).slice(-400) });
+          // v1.3 rev E: safety check of the new version; if anything is wrong, roll back to the old version automatically
+          const problem = checkNewVersion();
+          if (problem && oldHead.trim()) {
+            return git(['reset', '--hard', oldHead.trim()], () => json(res, 500, { error: 'The new version failed its safety check (' + problem + '). Toshi Bot stayed on the old version. Tell Mr. C.' }));
+          }
           const head = out.includes('Already up to date') ? 'Already up to date.' : 'Updated. Restarting…';
           json(res, 200, { ok: true, msg: head, restart: !out.includes('Already up to date') });
           if (!out.includes('Already up to date')) setTimeout(() => process.exit(0), 800); // launchd KeepAlive starts the new version
-        });
+        }));
         if (!files.length) return go();
         if (!b.discard) return json(res, 409, { error: 'Local changes block the update', files });
         // keep a copy of the local edits in iCloud, then discard them
