@@ -1,5 +1,6 @@
 #!/bin/bash
-# Toshi Bot guard hook v0.4 rev A (10-11-2026)
+# Toshi Bot guard hook v0.4 rev B (10-11-2026)
+# v0.4 rev B: read-only lookups of any connector run without a card (Kapil's explicit yes, 10-11-2026).
 # v0.4: TOSHI_AUTOSEND=1 (Kapil's decision 10-11-2026) lets bots send email/WhatsApp/replies without the Haan card.
 # Runs before every MCP tool call (PreToolUse).
 #  1. Zoho Books / Zoho CRM writes: always BLOCKED (rule book: read-only).
@@ -73,6 +74,17 @@ case "$t" in
   *zoho*)
     if printf '%s' "$t" | grep -Eq 'get|list|search|query|fetch'; then
       decide allow "Toshi rule book: Zoho read-only lookup: $tool"
+    fi
+    ;;
+esac
+
+
+# 5. Read-only lookups of any connector (Google Drive/Sheets/Docs/Calendar, Apollo search, ...): no card (Kapil 10-11-2026)
+case "$t" in
+  mcp__*)
+    op="${t##*__}"
+    if printf '%s' "$op" | grep -Eq '^(search|get|list|read|fetch|download|query|find|lookup|describe)' && ! printf '%s' "$op" | grep -Eq 'create|update|delete|send|write|remove|add|share|trash|upsert|purchase'; then
+      decide allow "Read-only lookup: $tool"
     fi
     ;;
 esac

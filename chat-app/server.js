@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.0 rev B';
+const VERSION = 'v1.0 rev C';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -22,7 +22,14 @@ const readJSON = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8'))
 
 const SEND_RE = /send|reply|forward|trash|delete|spam|share_file|create|update|upsert|post|remove|approve|purchase|merge/i;
 const running = new Map(); // agent -> child process
-const SHARED_BROWSER = new Set(['mr-c', 'linkedin-desk']);
+// v1.0 rev C (Kapil 10-11-2026): all bots share ONE logged-in browser (Google, LinkedIn) unless set to "Own browser".
+// WhatsApp-type bots keep their own browser by default (their WhatsApp Web login lives there).
+const SHARED_BROWSER = { has: agent => usesSharedBrowser(agent) };
+function usesSharedBrowser(agent) {
+  const own = (readJSON(path.join(STORE_DIR(), 'app-settings.json'), {}).ownBrowser) || {};
+  if (agent in own) return !own[agent];
+  return !/whatsapp|diwali/i.test(agent);
+}
 const BUILT_IN = new Set(['mr-c', 'investor-desk', 'linkedin-desk']);
 const STRICT_SEND_RE = /whatsapp|diwali/i; // agents whose browser 'send' clicks need Kapil's Haan
 function tailscaleIp() {
@@ -91,7 +98,7 @@ function runClaude(agent, message, opts, onEvent) {
   const model = (getSettings().models || {})[agent];
   if (['opus', 'sonnet', 'haiku'].includes(model)) args.push('--model', model); // per-bot model (v0.9 rev D)
   if (chat.sessionId) args.push('--resume', chat.sessionId);
-  const allow = [...new Set([...(chat.allow || []), ...(opts.allowOnce || [])])];
+  const allow = [...new Set([...(chat.allow || []), ...(getSettings().allowAll || []), ...(opts.allowOnce || [])])]; // allowAll = approved once for all bots
   if (allow.length) args.push('--allowedTools', ...allow);
   const tone = opts.tone === 'fun'
     ? 'Tone for this chat: Fun, witty and cheeky (Grok style), still accurate and brief. Hinglish with "aap".'
@@ -229,7 +236,9 @@ const saveSchedules = l => writeJSON(SCHED_FILE, l);
 // Start one agent run (used by chat and by schedules)
 function startRun(agent, text, opts, onEvent, meta = {}) {
   const c = loadChat(agent);
-  if (opts.always && Array.isArray(opts.allowOnce)) c.allow = [...new Set([...(c.allow || []), ...opts.allowOnce.filter(t => !SEND_RE.test(t))])];
+  if (opts.always && Array.isArray(opts.allowOnce)) {
+    const st = getSettings(); st.allowAll = [...new Set([...(st.allowAll || []), ...opts.allowOnce.filter(t => !SEND_RE.test(t))])]; writeJSON(SETTINGS_FILE, st);
+  }
   c.messages.push({ who: 'me', text: meta.label ? meta.label + '\n' + text : text, at: stamp() }); delete c.pending; saveChat(agent, c);
   const what = meta.handoff ? 'Task from ' + meta.from : 'Scheduled task ' + meta.time;
   opts.kind = meta.handoff ? 'handoff' : meta.scheduled ? 'schedule' : 'chat';
@@ -609,7 +618,7 @@ const server = http.createServer(async (req, res) => {
       }
     }
     if (url.pathname === '/api/settings') {
-      if (req.method === 'GET') return json(res, 200, { ...getSettings(), folders: getFolders() });
+      if (req.method === 'GET') return json(res, 200, { ...getSettings(), folders: getFolders(), shared: Object.fromEntries(listAgents().map(a => [a.id, usesSharedBrowser(a.id)])) });
       if (req.method === 'POST') {
         const b = await readBody(req); const s = getSettings();
         if (b.action === 'notify') {
@@ -622,6 +631,11 @@ const server = http.createServer(async (req, res) => {
           const m = String(b.model || ''); if (m && !['opus', 'sonnet', 'haiku'].includes(m)) return json(res, 400, { error: 'Unknown model.' });
           s.models = s.models || {}; if (m) s.models[b.id] = m; else delete s.models[b.id]; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
         }
+        if (b.action === 'ownBrowser') {
+          if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });
+          s.ownBrowser = s.ownBrowser || {}; s.ownBrowser[b.id] = !!b.on; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
+        }
+        if (b.action === 'removeAllow') { s.allowAll = (s.allowAll || []).filter(t => t !== b.tool); writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'autoSend') { s.autoSend = !!b.on; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'autoSendBot') {
           if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });

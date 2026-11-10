@@ -1,6 +1,6 @@
 # Toshi Bot: Golden Rule Book
 
-Version: v0.4 rev B | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
+Version: v0.4 rev C | Date: 09-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
 
 This rule book applies to every Toshi Bot agent run with Claude Code on the Mac mini. (Product renamed from "Toshi Agents" to "Toshi Bot" on 09-11-2026; folder and repo names stay toshi-agents.)
 Each agent's own charter (kept privately in iCloud) adds detail. If they disagree, the stricter rule wins.
@@ -13,12 +13,12 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Claude Code | 2.1.x (keep updated with `claude update`) |
 | Node.js | Current LTS (needed for the browser tool) |
 | Playwright MCP (browser tool) | 0.0.83 (pinned), connects to each bot's hidden Chrome via scripts/browser-mcp.sh v0.9 rev B |
-| Rule book | v0.4 rev B |
+| Rule book | v0.4 rev C |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
-| Guard hook | v0.4 rev A |
-| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot) | v1.0 rev B |
+| Guard hook | v0.4 rev B |
+| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser) | v1.0 rev C |
 
 ## 2. Rules for every agent
 
@@ -95,6 +95,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 5. No cloud computer (09-11-2026): the Mac mini at home is Toshi's only agent computer. Data stays on Kapil's Mac and iCloud.
 6. Mac mini stays ON always (09-11-2026): never shut down, sleep or log out. Restarts only for updates; the app auto-starts after.
 7. Auto-send for all bots incl. Investor Bot, no daily limit, send only on demand (10-11-2026). Replaces decision 1 and the Haan-card rule for sends.
+8. Shared logged-in browser for all bots (WhatsApp bots keep their own); one "always allow" counts for all bots; read-only lookups of any connector need no card (10-11-2026). Bots act only when Kapil asks.
 
 ## 7. Roadmap
 
@@ -108,6 +109,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v0.4 rev C | 10-11-2026 | Decision 8: shared browser, all-bots always-allow, read-only lookups without card (guard v0.4 rev B, app v1.0 rev C). |
 | v0.4 rev B | 10-11-2026 | App v1.0 rev B: Toshi Bot icon, paste images/files into the message box, 📎 menu (file, screenshot, Mac screen, bot browser, camera). |
 | v0.4 rev A | 10-11-2026 | Auto-send for all bots incl. Investor Bot, no daily limit (Kapil). Rules 1, 2, 12 rewritten; guard v0.4; send log + 🔔. |
 | v0.3 rev G | 10-11-2026 | v0.9 rev E: 🎤 mic button to speak messages (Hindi/Hinglish or English). |

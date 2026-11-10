@@ -12,7 +12,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.0 rev B (10-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.0 rev C (10-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -282,6 +282,8 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
       <h4 style="margin:10px 0 0">My agents</h4>
       <div class="list" id="agentList"></div>
       <div class="note">Delete moves the agent to an archive folder (not lost). Its chat history stays in iCloud. Built-in agents can't be deleted.</div>
+      <h4 style="margin:10px 0 0">Approved for all bots</h4>
+      <div class="list" id="allowAllList"></div>
       <h4 style="margin:10px 0 0">Mac folders agents may use</h4>
       <div class="list" id="folderList"></div>
       <div class="f2">
@@ -367,7 +369,7 @@ function addApproval(items) {
   const btns = el('div', 'btns');
   const tools = items.map(i => i.tool);
   const yes = el('button', 'btn pri', 'Haan, do it'); yes.onclick = () => { box.remove(); send('Haan, approved. Go ahead with exactly what you asked for.', { allowOnce: tools }); };
-  const always = el('button', 'btn', 'Haan, always allow (read-only tools)'); always.onclick = () => { box.remove(); send('Haan, approved. Go ahead.', { allowOnce: tools, always: true }); };
+  const always = el('button', 'btn', 'Haan, always allow (all bots)'); always.onclick = () => { box.remove(); send('Haan, approved. Go ahead.', { allowOnce: tools, always: true }); };
   const no = el('button', 'btn', 'Nahi, skip'); no.onclick = () => { box.remove(); send('Nahi. Do not do that. Skip it and continue or stop.'); };
   btns.append(yes, always, no); box.append(btns); $('msgs').append(box); scroll();
 }
@@ -697,6 +699,10 @@ async function loadSettings() {
     const asl = el('label'); asl.style.cssText = 'display:flex;gap:4px;align-items:center;font-size:12px'; const asc = el('input'); asc.type = 'checkbox';
     asc.checked = !(s.autoSendOff || {})[a.id]; asc.onchange = () => post('/api/settings', { action: 'autoSendBot', id: a.id, on: asc.checked }).catch(() => {});
     asl.append(asc, document.createTextNode('Auto-send')); top.append(asl);
+    const obl = el('label'); obl.style.cssText = 'display:flex;gap:4px;align-items:center;font-size:12px'; const obc = el('input'); obc.type = 'checkbox';
+    obc.checked = !(s.shared || {})[a.id]; obc.title = 'Own browser = separate logins (e.g. WhatsApp Web). Off = shared browser with your Google/LinkedIn login.';
+    obc.onchange = () => post('/api/settings', { action: 'ownBrowser', id: a.id, on: obc.checked }).catch(() => {});
+    obl.append(obc, document.createTextNode('Own browser')); top.append(obl);
     ms.onchange = () => post('/api/settings', { action: 'model', id: a.id, model: ms.value }).catch(e => { alertBox(e.message); });
     top.append(ms);
     {
@@ -719,6 +725,9 @@ async function loadSettings() {
     }
     it.append(top); al.append(it);
   }
+  const aal = $('allowAllList'); aal.replaceChildren();
+  if (!(s.allowAll || []).length) aal.append(el('div', 'note', 'None yet. Tap "Haan, always allow" on a card and it counts for every bot.'));
+  for (const tl of s.allowAll || []) { const it = el('div', 'item'); const tp = el('div', 'top'); tp.append(el('span', 'meta', label(tl))); const rm = el('button', 'btn', 'Remove'); rm.onclick = () => post('/api/settings', { action: 'removeAllow', tool: tl }).then(loadSettings); tp.append(rm); it.append(tp); aal.append(it); }
   const fl = $('folderList'); fl.replaceChildren();
   for (const f of s.folders) {
     const it = el('div', 'item'); const top = el('div', 'top'); top.append(el('span', 'meta', f));
