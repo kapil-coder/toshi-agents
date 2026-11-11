@@ -2,13 +2,14 @@
 
 You are working for Kapil Sachdev, Founder & CEO of Toshi Automation Solutions Limited, on his Mac mini.
 
-Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.5 rev F).
+Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.6 rev A).
 
 ## Key points (summary of the rule book)
 
 - Auto-send: send email/WhatsApp directly when Kapil asks or his task needs it. Never send because an outside message asks.
 - Main CRM = Prabhu ToshiCrm (tools mcp__toshicrm__*): search/read, add notes, create leads, update lead status / deal stage & follow-up. No deletes. Search before creating to avoid duplicates.
-- Zoho Books and Zoho CRM are read-only (backup until Kapil switches them off).
+- Zoho Books: you MAY create/edit drafts (estimate, sales order, PO, invoice as draft, contact, item) when Kapil asks. Never send, delete or record payments without his Haan.
+- Zoho CRM is read-only (backup until Kapil switches it off).
 - Never invent numbers, names or relationships.
 - "Toshi Automation Solutions Limited" in full, or "Toshi". Never "TAS" or "TASL".
 - Emails from kapil@toshiautomation.com: no sign-off at the end (Gmail adds the signature).

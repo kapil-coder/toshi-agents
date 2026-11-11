@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.7 rev A (10-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.8 rev A (11-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,10 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.ic.grpic{background:linear-gradient(160deg,#24427a,#1b3260);display:grid;place-items:center;font-size:21px}
+.agent .caret{color:var(--muted);font-size:12px;padding:6px 4px;flex:none}
+.agent.sub{margin-left:12px;width:calc(100% - 12px);border-left:2px dashed var(--line);border-radius:0 8px 8px 0}
+.agent.sub .ic{width:36px;height:36px;border-radius:10px}
 .asearch{display:flex;align-items:center;gap:4px;border:1px solid var(--line);background:var(--surface);border-radius:9px;padding:5px 8px;margin:2px 0 6px}
 .asearch input{border:0;background:none;outline:0;flex:1;min-width:0;font-size:14px;color:inherit;padding:0}
 .asearch button{border:0;background:none;color:var(--muted);cursor:pointer;padding:0 2px}
@@ -193,6 +197,7 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
   .side h4,.side .agent small,.side .live,.side .pill{display:none}
   .agent{width:auto;flex:none}
   .asearch{flex:none;width:130px;margin:0 4px 0 0}
+  .agent.sub{margin-left:0;width:auto;border-left:0;background:rgba(36,66,122,.07);border-radius:8px}
   .titlebar .dot{display:none}
   .m{max-width:92%}
 }
@@ -283,6 +288,7 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
         <div class="fld"><label for="fName">Agent name</label><input type="text" id="fName" placeholder="e.g. Tender Hunter"></div>
         <div class="fld"><label for="fCo">Company</label><select id="fCo"><option>Toshi Automation</option><option>TRAC Engineering</option><option>Toshi Greentech</option><option>All</option></select></div>
       </div>
+      <div class="fld"><label for="fGroup">Group (folder in the list)</label><select id="fGroup"></select></div>
       <div class="fld"><label for="fJob">Job (what it does)</label><textarea id="fJob" rows="2"></textarea></div>
       <div class="f2">
         <div class="fld"><label for="fTone">Personality</label><select id="fTone"><option>Professional</option><option>Fun (Grok style)</option><option>Hinglish, friendly</option><option>Brief, respectful Hinglish (aap)</option></select></div>
@@ -375,7 +381,10 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
       <div class="list" id="tmLog"></div>
       <h4 style="margin:10px 0 0">✉️ Auto-send</h4>
       <div class="opts"><label><input type="checkbox" id="autoSend"> Bots send email / WhatsApp directly when asked (no Haan card)</label></div>
-      <div class="note">Turn OFF here any time = emergency stop for all bots. Deletes, file shares and payments still ask. Zoho stays read-only.</div>
+      <div class="note">Turn OFF here any time = emergency stop for all bots. Deletes, file shares and payments still ask. Zoho CRM stays read-only.</div>
+      <h4 style="margin:10px 0 0">📒 Zoho Books</h4>
+      <div class="opts"><label><input type="checkbox" id="zohoDrafts"> Bots may create drafts in Zoho Books (estimate, sales order, PO, invoice, contact, item)</label></div>
+      <div class="note">Drafts only, nothing is sent. Sending a document, payments and expenses ask for Haan. Deletes are blocked. Zoho CRM stays read-only. Every Zoho Books write shows in Recent sends.</div>
       <div class="list" id="sendList"></div>
       <h4 style="margin:10px 0 0">📊 Usage</h4>
       <div id="usageBox"><div class="note">Loading…</div></div>
@@ -387,6 +396,13 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
       </div>
       <div class="note">Each bot loads only the connectors ticked for it (tap "Connectors" on a bot below). Recommended: WhatsApp bots = browser only; others = browser, Gmail, Google, Zoho, Apollo. Chats also start fresh automatically after 15 messages.</div>
       <div class="msg" id="saveMsg"></div>
+      <h4 style="margin:10px 0 0">📂 Groups</h4>
+      <div class="list" id="groupList"></div>
+      <div class="f2">
+        <div class="fld"><input type="text" id="newGroup" placeholder="New group name, e.g. Accounts Bots" aria-label="New group name"></div>
+        <div class="fld" style="align-content:end"><div class="btns"><button class="btn pri" id="groupAddBtn" type="button">+ Add group</button><span class="msg" id="groupMsg"></span></div></div>
+      </div>
+      <div class="note">Put a bot in a group with its "Group" box below. Delete a group = its bots go back to the main list (bots are not deleted).</div>
       <h4 style="margin:10px 0 0">My agents</h4>
       <div class="list" id="agentList"></div>
       <div class="note">Delete moves the agent to an archive folder (not lost). Its chat history stays in iCloud. Built-in agents can't be deleted.</div>
@@ -475,17 +491,43 @@ const colorOf = id => COLORS[[...id].reduce((a, c) => a + c.charCodeAt(0), 0) % 
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function scroll() { const m = $('msgs'); m.scrollTop = m.scrollHeight; }
 
+// ---------- v1.8 groups ----------
+let groups = [], openGroups = new Set();
+try { openGroups = new Set(JSON.parse(localStorage.getItem('openGroups') || '[]')); } catch {}
+const saveOpen = () => { try { localStorage.setItem('openGroups', JSON.stringify([...openGroups])); } catch {} };
+function groupIcon(small) { const w = el('span', 'ic grpic' + (small ? ' sm' : ''), '📂'); return w; }
+function curInfo() {
+  const g = groups.find(x => x.id === cur);
+  if (g) return { id: g.id, name: g.name, isGroup: true, description: (n => 'Group chat · ' + n + ' bot' + (n === 1 ? '' : 's'))(agents.filter(a => a.group === g.id).length) };
+  return agents.find(x => x.id === cur) || agents[0];
+}
+function toggleGroup(gid) { openGroups.has(gid) ? openGroups.delete(gid) : openGroups.add(gid); saveOpen(); filterAgents(); }
+function selectChat(id) { if (cur === id) return; cur = id; attached = []; showFiles(); try { localStorage.setItem('agent', cur); } catch {} loadAgents(); }
 async function loadAgents() {
-  agents = await (await fetch('/api/agents')).json();
-  if (!agents.some(a => a.id === cur)) cur = 'mr-c';
+  const [al, gl] = await Promise.all([fetch('/api/agents').then(r => r.json()), fetch('/api/groups').then(r => r.json()).catch(() => [])]);
+  agents = al; groups = gl;
+  if (!agents.some(a => a.id === cur) && !groups.some(g => g.id === cur)) cur = 'mr-c';
   const side = $('side'); side.replaceChildren(el('h4', null, 'My agents · ' + agents.length), agentSearch());
-  for (const a of agents) {
+  const inGroup = a => !a.pinned && a.group && groups.some(g => g.id === a.group);
+  const order = [...agents.filter(a => !inGroup(a))];
+  for (const g of groups) order.push({ grpHead: g }, ...agents.filter(a => inGroup(a) && a.group === g.id));
+  for (const a of order) {
+    if (a.grpHead) {
+      const g = a.grpHead, n = agents.filter(x => x.group === g.id).length;
+      const h = el('div', 'agent grp' + (g.id === cur ? ' on' : '') + (g.busy ? ' work' : '')); h.dataset.grp = g.id; h.setAttribute('role', 'button'); h.tabIndex = 0;
+      const t = el('span'); t.append(el('b', null, g.name), el('small', null, n + ' bot' + (n === 1 ? '' : 's') + ' · group chat'));
+      const car = el('span', 'caret', '▸'); car.title = 'Open / close group'; car.onclick = e => { e.stopPropagation(); toggleGroup(g.id); };
+      h.append(groupIcon(), t, car, g.unread && g.id !== cur ? el('span', 'bell', '🔔') : el('span', 'live' + (g.busy ? ' busy' : '')));
+      h.onclick = () => { if (cur === g.id) { toggleGroup(g.id); return; } openGroups.add(g.id); saveOpen(); selectChat(g.id); };
+      h.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); h.click(); } };
+      side.append(h); continue;
+    }
     const working = busyAgents.has(a.id) || a.busy;
-    const b = el('button', 'agent' + (a.id === cur ? ' on' : '') + (working ? ' work' : '')); b.dataset.id = a.id;
+    const b = el('button', 'agent' + (a.id === cur ? ' on' : '') + (working ? ' work' : '') + (inGroup(a) ? ' sub' : '')); b.dataset.id = a.id; if (inGroup(a)) b.dataset.gid = a.group;
     const av = botIcon(a);
     const t = el('span'); t.append(el('b', null, (a.pinned ? '⭐ ' : '') + a.name), el('small', null, a.description));
     b.append(av, t, a.unread && a.id !== cur ? el('span', 'bell', '🔔') : a.paused && !busyAgents.has(a.id) ? el('span', 'pill warn', 'Paused') : el('span', 'live' + (busyAgents.has(a.id) || a.busy ? ' busy' : '')));
-    b.onclick = () => { if (cur === a.id) return; cur = a.id; attached = []; showFiles(); try { localStorage.setItem('agent', cur); } catch {} loadAgents(); };
+    b.onclick = () => selectChat(a.id);
     side.append(b);
   }
   const add = el('button', 'agent'); add.style.color = 'var(--accent)';
@@ -505,7 +547,7 @@ function agentSearch() {
   i.oninput = () => { agentQ = i.value.trim().toLowerCase(); x.hidden = !agentQ; filterAgents(); };
   i.onkeydown = e => {
     if (e.key === 'Escape') { i.value = ''; i.oninput(); i.blur(); }
-    if (e.key === 'Enter') { e.preventDefault(); const f = [...document.querySelectorAll('#side .agent[data-id]')].find(b => !b.hidden); if (f) { i.value = ''; i.oninput(); f.click(); } }
+    if (e.key === 'Enter') { e.preventDefault(); const f = [...document.querySelectorAll('#side .agent[data-id], #side .agent[data-grp]')].find(b => !b.hidden); if (f) { i.value = ''; i.oninput(); f.click(); } }
   };
   x.onclick = () => { i.value = ''; i.oninput(); i.focus(); };
   w.append(el('span', null, '🔍'), i, x); return w;
@@ -520,8 +562,17 @@ function filterAgents() {
   for (const b of document.querySelectorAll('#side .agent[data-id]')) {
     const a = agents.find(x => x.id === b.dataset.id); if (!a) continue;
     const hit = !agentQ || (a.name + ' ' + (a.description || '') + ' ' + a.id).toLowerCase().includes(agentQ);
-    b.hidden = !hit; if (hit) shown++;
+    const closed = b.dataset.gid && !openGroups.has(b.dataset.gid) && !agentQ;
+    b.hidden = !hit || closed; if (hit) shown++;
     markText(b.children[1].querySelector('b'), (a.pinned ? '⭐ ' : '') + a.name, agentQ); markText(b.children[1].querySelector('small'), a.description || '', agentQ);
+  }
+  for (const h of document.querySelectorAll('#side .agent[data-grp]')) {
+    const g = groups.find(x => x.id === h.dataset.grp); if (!g) continue;
+    const memHit = [...document.querySelectorAll('#side .agent[data-gid="' + g.id + '"]')].some(b => !b.hidden);
+    const nameHit = !agentQ || g.name.toLowerCase().includes(agentQ);
+    h.hidden = !!agentQ && !memHit && !nameHit; if (agentQ && nameHit) shown++;
+    h.querySelector('.caret').textContent = (openGroups.has(g.id) || (agentQ && memHit)) ? '▾' : '▸';
+    markText(h.children[1].querySelector('b'), g.name, agentQ);
   }
   const old = document.querySelector('#side .nores'); if (old) old.remove();
   if (!shown) { const n = el('div', 'nores', 'No bot found'); $('asearch').after(n); }
@@ -532,14 +583,15 @@ document.addEventListener('keydown', e => {
   const i = $('agentQ'); if (i) { e.preventDefault(); i.focus(); }
 });
 $('pinBtn').onclick = async () => {
-  const a = agents.find(x => x.id === cur); if (!a) return;
+  const a = agents.find(x => x.id === cur); if (!a) return; // groups have no pin
   await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'pin', id: cur, on: !a.pinned }) }).catch(() => {});
   loadAgents();
 };
 function showHeader() {
-  const a = agents.find(x => x.id === cur) || agents[0];
+  const a = curInfo();
   $('hname').textContent = a.name; $('hrole').textContent = a.description;
-  { const h = botIcon(a, true); h.id = 'hav'; $('hav').replaceWith(h); }
+  { const h = a.isGroup ? groupIcon(true) : botIcon(a, true); h.id = 'hav'; $('hav').replaceWith(h); }
+  $('pinBtn').hidden = !!a.isGroup;
   $('inp').placeholder = 'Message ' + a.name + '…';
   $('pinBtn').textContent = a.pinned ? '⭐ Pinned' : '☆ Pin'; $('pinBtn').title = a.pinned ? 'Unpin' : 'Pin this bot to the top of the list';
 }
@@ -715,7 +767,10 @@ status(); setInterval(status, 60000);
 // add agent
 function opts(box, list, checked) { box.replaceChildren(); for (const v of list) { const l = el('label'); const i = el('input'); i.type = 'checkbox'; i.value = v; i.checked = checked.includes(v); l.append(i, document.createTextNode(v)); box.append(l); } }
 function picked(box) { return [...box.querySelectorAll('input:checked')].map(i => i.value); }
-function openAdd() { opts($('fTools'), TOOLS, ['Gmail']); opts($('fAsk'), ASKS, ['Sending mail','Editing CRM','Payments']); $('smsg').textContent = ''; $('cmsg').textContent = ''; $('overlay').hidden = false; }
+function openAdd() {
+  const fg = $('fGroup'); fg.replaceChildren(new Option('No group (main list)', '')); for (const g of groups) fg.add(new Option('📂 ' + g.name, g.id));
+  fg.value = groups.some(g => g.id === cur) ? cur : '';
+  opts($('fTools'), TOOLS, ['Gmail']); opts($('fAsk'), ASKS, ['Sending mail','Editing CRM','Payments']); $('smsg').textContent = ''; $('cmsg').textContent = ''; $('overlay').hidden = false; }
 $('closeAdd').onclick = () => { $('overlay').hidden = true; };
 $('tabImport').onclick = () => { $('tabImport').classList.add('on'); $('tabNew').classList.remove('on'); $('importBox').hidden = false; };
 $('tabNew').onclick = () => { $('tabNew').classList.add('on'); $('tabImport').classList.remove('on'); $('importBox').hidden = true; };
@@ -740,6 +795,7 @@ $('save').onclick = async () => {
   const r = await fetch('/api/agents', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const d = await r.json();
   if (!r.ok) { $('smsg').textContent = d.error; return; }
+  if ($('fGroup').value) { await post('/api/settings', { action: 'agentGroup', id: d.id, gid: $('fGroup').value }).catch(() => {}); openGroups.add($('fGroup').value); saveOpen(); }
   $('smsg').textContent = 'Saved. ' + body.name + ' is in your agent list.'; cur = d.id; setTimeout(() => { $('overlay').hidden = true; loadAgents(); }, 700);
 };
 // Auto-refresh: shows messages typed on the other device (Mac mini / iPhone / MacBook)
@@ -945,6 +1001,8 @@ async function loadSettings() {
   let s; try { const r1 = await fetch('/api/settings'); if (!r1.ok) throw 0; s = await r1.json(); } catch { settingsLoadFailed(); return; }
   $('showBrowser').checked = !!s.showBrowser;
   $('autoSend').checked = s.autoSend !== false;
+  $('zohoDrafts').checked = s.zohoDrafts !== false;
+  loadGroupList();
   $('dayAlert').value = s.dailyAlertRuns || '';
   fetch('/api/sends').then(r => r.json()).then(list => {
     const box = $('sendList'); box.replaceChildren();
@@ -981,6 +1039,11 @@ async function loadSettings() {
       it.append(box);
     };
     top.append(cb);
+    const gs = el('select'); gs.style.cssText = ms.style.cssText; gs.title = 'Group (folder in the list)';
+    gs.add(new Option('Group: none', '')); for (const g of groups) gs.add(new Option('📂 ' + g.name, g.id));
+    gs.value = groups.some(g => g.id === a.group) ? a.group : '';
+    gs.onchange = () => post('/api/settings', { action: 'agentGroup', id: a.id, gid: gs.value }).then(() => { if (gs.value) { openGroups.add(gs.value); saveOpen(); } loadAgents(); }).catch(e => { alertBox(e.message); });
+    top.append(gs);
     ms.onchange = () => post('/api/settings', { action: 'model', id: a.id, model: ms.value }).catch(e => { alertBox(e.message); });
     top.append(ms);
     const isel = el('select'); isel.style.cssText = ms.style.cssText;
@@ -1028,6 +1091,22 @@ async function loadSettings() {
 }
 $('dayAlertSave').onclick = () => post('/api/settings', { action: 'dailyAlert', runs: $('dayAlert').value }).then(() => { $('saveMsg').textContent = 'Alert saved ✓'; });
 $('recAll').onclick = () => post('/api/settings', { action: 'recommendedAll' }).then(() => { $('saveMsg').textContent = 'Recommended connectors applied to all bots ✓'; loadSettings(); });
+$('zohoDrafts').onchange = () => post('/api/settings', { action: 'zohoDrafts', on: $('zohoDrafts').checked }).catch(() => {});
+function loadGroupList() {
+  const box = $('groupList'); box.replaceChildren();
+  if (!groups.length) box.append(el('div', 'note', 'No groups yet.'));
+  for (const g of groups) {
+    const it = el('div', 'item'), top = el('div', 'top'); const n = agents.filter(a => a.group === g.id).length;
+    top.append(el('b', null, '📂 ' + g.name), el('span', 'meta', n + ' bot' + (n === 1 ? '' : 's')));
+    const rn = el('button', 'btn', 'Rename'); rn.type = 'button';
+    rn.onclick = () => { const v = prompt('New name for the group', g.name); if (v && v.trim()) post('/api/settings', { action: 'groupRename', gid: g.id, name: v.trim() }).then(() => loadAgents().then(loadSettings)).catch(e => { $('groupMsg').textContent = e.message; }); };
+    const dl = el('button', 'btn', 'Delete group'); dl.type = 'button';
+    dl.onclick = () => { if (confirm('Delete group "' + g.name + '"? Its bots go back to the main list (they are not deleted).')) post('/api/settings', { action: 'groupDelete', gid: g.id }).then(() => loadAgents().then(loadSettings)).catch(e => { $('groupMsg').textContent = e.message; }); };
+    top.append(rn, dl); it.append(top); box.append(it);
+  }
+}
+$('groupAddBtn').onclick = () => { const v = $('newGroup').value.trim(); if (!v) { $('groupMsg').textContent = 'Write the group name.'; return; }
+  post('/api/settings', { action: 'groupAdd', name: v }).then(() => { $('newGroup').value = ''; $('groupMsg').textContent = 'Added ✓'; return loadAgents().then(loadSettings); }).catch(e => { $('groupMsg').textContent = e.message; }); };
 $('autoSend').onchange = () => post('/api/settings', { action: 'autoSend', on: $('autoSend').checked }).catch(() => {});
 $('closeBr').onclick = () => post('/api/settings', { action: 'closeBrowsers' }).then(() => { $('closeBrMsg').textContent = 'Closed ✓'; }).catch(e => { $('closeBrMsg').textContent = e.message; });
 $('showBrowser').onchange = () => post('/api/settings', { action: 'showBrowser', on: $('showBrowser').checked }).catch(() => {});

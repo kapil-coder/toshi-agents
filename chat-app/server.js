@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.7 rev A';
+const VERSION = 'v1.8 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -62,7 +62,16 @@ function listAgentsRaw() {
   }
   return out;
 }
-const validAgent = id => listAgents().some(a => a.id === id);
+const validAgent = id => listAgents().some(a => a.id === id) || isGroup(id);
+// ---------- v1.8 bot groups (folders in the sidebar; each group has its own router chat) ----------
+function getGroups() {
+  const s = getSettings();
+  if (!Array.isArray(s.groups)) { s.groups = [{ id: 'grp-software-bots', name: 'Software Bots' }]; writeJSON(SETTINGS_FILE, s); }
+  return s.groups;
+}
+const isGroup = id => typeof id === 'string' && id.startsWith('grp-') && getGroups().some(g => g.id === id);
+const groupOf = id => (getSettings().agentGroup || {})[id] || '';
+const groupMembers = gid => listAgents().filter(a => groupOf(a.id) === gid);
 
 // ---------- chat history ----------
 const chatFile = id => path.join(DATA, id.replace(/[^a-z0-9-]/gi, '') + '.json');
@@ -94,7 +103,7 @@ function toolLabel(name) {
 function runClaude(agent, message, opts, onEvent) {
   const chat = loadChat(agent);
   const args = ['-p', '--output-format', 'stream-json', '--verbose', '--permission-mode', 'default'];
-  if (agent !== 'mr-c') args.push('--agent', agent);
+  if (agent !== 'mr-c' && !isGroup(agent)) args.push('--agent', agent);
   const model = (getSettings().models || {})[agent];
   if (['opus', 'sonnet', 'haiku'].includes(model)) args.push('--model', model); // per-bot model (v0.9 rev D)
   // v1.3 auto-fresh: after 15 runs in one session, start a new session carrying only the last few messages (saves tokens)
@@ -112,19 +121,28 @@ function runClaude(agent, message, opts, onEvent) {
   const tone = opts.tone === 'fun'
     ? 'Tone for this chat: Fun, witty and cheeky (Grok style), still accurate and brief. Hinglish with "aap".'
     : 'Tone for this chat: Professional, brief, bullet points. Hinglish with "aap" when talking to Kapil.';
-  args.push('--append-system-prompt', tone + ' Your name in the Toshi Bot app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.');
+  let groupNote = '';
+  if (isGroup(agent)) {
+    const mem = groupMembers(agent);
+    groupNote = ' You are the GROUP CHAT of the bot group "' + agentName(agent) + '" in the Toshi Bot app. Members:\n' +
+      (mem.length ? mem.map(a => '- ' + a.id + ': ' + a.name + ' (' + a.description + ')').join('\n') : '- (no bots in this group yet)') +
+      '\nYour job: understand Kapil\'s request and hand it to the right member with: node chat-app/handoff.js <agent-id> "full instruction with all details". ' +
+      'Several bots needed: hand to each. Then reply in 1-3 short lines saying which bot got the work (its reply appears in that bot\'s chat). ' +
+      'If no member fits or the request is unclear, ask Kapil briefly. Do not do a member\'s work yourself. If the group is empty, tell Kapil to add bots via Settings > My agents > Group.';
+  }
+  args.push('--append-system-prompt', tone + ' Your name in the Toshi Bot app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.' + groupNote);
   args.push('--', freshNote + message);
 
   // Tools Kapil approved with Haan for this run: the guard hook allows exactly these
   // Own browser per agent (LinkedIn Desk and Mr. C keep the shared profile with the LinkedIn login)
   const env = { ...process.env, TOSHI_ALLOW: allow.join(' '), TOSHI_AGENT: agent, TOSHI_HOP: String(opts.hop || 0),
     TOSHI_PORT: String(PORT), TOSHI_SHOW_BROWSER: getSettings().showBrowser ? '1' : '', TOSHI_STRICT_SEND: STRICT_SEND_RE.test(agent + ' ' + agentName(agent)) ? '1' : '',
-    TOSHI_AUTOSEND: autoSendOn(agent) ? '1' : '' };
+    TOSHI_AUTOSEND: autoSendOn(agent) ? '1' : '', TOSHI_ZOHO_DRAFTS: getSettings().zohoDrafts !== false ? '1' : '' };
   if (!SHARED_BROWSER.has(agent)) {
     env.TOSHI_BROWSER_PROFILE = path.join(os.homedir(), '.toshi-agents', 'chrome-profiles', agent);
     env.TOSHI_BROWSER_OUTPUT = path.join(os.homedir(), '.toshi-agents', 'browser-output', agent);
   }
-  if (fs.existsSync(ICLOUD)) fs.mkdirSync(path.join(ICLOUD, agent === 'mr-c' ? 'shared' : agent, 'work'), { recursive: true });
+  if (fs.existsSync(ICLOUD)) fs.mkdirSync(path.join(ICLOUD, agent === 'mr-c' || isGroup(agent) ? 'shared' : agent, 'work'), { recursive: true });
   const child = spawn('claude', args, { cwd: PROJECT, env });
   running.set(agent, child);
   let buf = '', finalText = [], sessionId = chat.sessionId, denials = [], errText = '';
@@ -275,7 +293,7 @@ function readSettingsSafe() {
 function getSettings() {
   return Object.assign({ ntfyTopic: '', notify: false, appUrl: 'https://kapils-mac-mini.tailac1d46.ts.net' }, JSON.parse(JSON.stringify(readSettingsSafe())));
 }
-const agentName = id => (listAgents().find(a => a.id === id) || { name: id }).name;
+const agentName = id => (listAgents().find(a => a.id === id) || getGroups().find(g => g.id === id) || { name: id }).name;
 
 // Phone push via the free ntfy app. Only a short, non-confidential line is sent.
 function notify(title, body) {
@@ -473,6 +491,7 @@ function usageSummary() {
 function autoSendOn(agent) { const s = getSettings(); return s.autoSend !== false && !(s.autoSendOff || {})[agent]; }
 function isSendCall(agent, name, input) {
   const t = String(name).toLowerCase(), inp = JSON.stringify(input || {});
+  if (/zoho_?books/.test(t) && /__(create|update)_/.test(t)) return true; // v1.8: Zoho Books drafts show in Recent sends
   if (/send|reply|forward/.test(t) && !/draft/.test(t)) return true;
   if (STRICT_SEND_RE.test(agent + ' ' + agentName(agent))) {
     if (/browser_press_key/.test(t) && /"key"\s*:\s*"(enter|numpadenter)"/i.test(inp)) return true;
@@ -487,7 +506,7 @@ function logSend(agent, name, input) {
   const to = [i.to, i.recipient, i.recipients, i.element].flat().filter(Boolean).join(', ').slice(0, 120);
   const row = { t: stamp(), agent, name: agentName(agent), tool: toolLabel(name), to, auto: autoSendOn(agent) };
   try { fs.appendFileSync(SENDS_FILE, JSON.stringify(row) + '\n'); } catch {}
-  if (row.auto) notify('Toshi Bot: ' + row.name + ' sent a message', row.tool + '. Details in Settings > Recent sends.');
+  if (row.auto && !/zoho/i.test(row.tool)) notify('Toshi Bot: ' + row.name + ' sent a message', row.tool + '. Details in Settings > Recent sends.');
 }
 function recentSends(n = 30) {
   try { return fs.readFileSync(SENDS_FILE, 'utf8').split('\n').filter(Boolean).slice(-n).reverse().map(l => JSON.parse(l)); } catch { return []; }
@@ -711,9 +730,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/agents') { const icons = getSettings().icons || {}; const adir = path.join(STORE, 'avatars');
         const pins = getSettings().pins || []; // v1.7: pinned bots first
-        const list = listAgents().map(a => ({ ...a, busy: running.has(a.id), unread: !!loadChat(a.id).unread, icon: icons[a.id] || '', pinned: pins.includes(a.id),
+        const list = listAgents().map(a => ({ ...a, group: groupOf(a.id), busy: running.has(a.id), unread: !!loadChat(a.id).unread, icon: icons[a.id] || '', pinned: pins.includes(a.id),
           photo: ['png', 'jpg', 'jpeg', 'webp'].some(e => fs.existsSync(path.join(adir, a.id + '.' + e))) }));
         return json(res, 200, [...list.filter(a => a.pinned), ...list.filter(a => !a.pinned)]); }
+    if (req.method === 'GET' && url.pathname === '/api/groups') return json(res, 200, getGroups().map(g => ({ ...g, busy: running.has(g.id), unread: !!loadChat(g.id).unread })));
     if (req.method === 'GET' && url.pathname === '/api/status') {
       return json(res, 200, {
         app: VERSION, claude: claudeVersion, host: os.hostname(), uptime: os.uptime(),
@@ -981,6 +1001,26 @@ const server = http.createServer(async (req, res) => {
         if (b.action === 'pin') {
           if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });
           const p = (s.pins || []).filter(x => x !== b.id && validAgent(x)); if (b.on) p.push(b.id); s.pins = p; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
+        }
+        if (b.action === 'zohoDrafts') { s.zohoDrafts = !!b.on; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
+        if (b.action === 'groupAdd' || b.action === 'groupRename') {
+          const name = String(b.name || '').replace(/[*\n\r]/g, '').trim().slice(0, 40); if (!name) return json(res, 400, { error: 'Write the group name.' });
+          const g = getGroups(); const st = getSettings(); st.groups = g;
+          if (b.action === 'groupRename') { const x = g.find(x => x.id === b.gid); if (!x) return json(res, 404, { error: 'Group not found.' }); x.name = name; }
+          else { let id = 'grp-' + (slugify(name) || 'group'), n = 2; while (g.some(x => x.id === id)) id = 'grp-' + slugify(name) + '-' + n++; g.push({ id, name }); }
+          writeJSON(SETTINGS_FILE, st); return json(res, 200, { ok: true, groups: st.groups });
+        }
+        if (b.action === 'groupDelete') {
+          // bots inside are NOT deleted: they move back to the main list
+          const st = getSettings(); st.groups = getGroups().filter(x => x.id !== b.gid);
+          for (const [k, v] of Object.entries(st.agentGroup || {})) if (v === b.gid) delete st.agentGroup[k];
+          writeJSON(SETTINGS_FILE, st); return json(res, 200, { ok: true });
+        }
+        if (b.action === 'agentGroup') {
+          if (!listAgents().some(a => a.id === b.id)) return json(res, 404, { error: 'Agent not found.' });
+          if (b.gid && !isGroup(b.gid)) return json(res, 404, { error: 'Group not found.' });
+          s.agentGroup = s.agentGroup || {}; if (b.gid) s.agentGroup[b.id] = b.gid; else delete s.agentGroup[b.id];
+          writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
         }
         if (b.action === 'ownBrowser') {
           if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });

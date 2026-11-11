@@ -35,6 +35,18 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     await p.click('#pinBtn'); await p.waitForTimeout(700);
     await p.click('#side .agent[data-id="mr-c"]'); await p.waitForTimeout(800);
     check((await p.textContent('#micLang')) === 'EN', 'Mic default is EN');
+    // v1.8 groups
+    check((await p.textContent('#side')).includes('Software Bots'), 'Default group Software Bots shows');
+    await p.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'agentGroup', id: 'linkedin-desk', gid: 'grp-software-bots' }) }));
+    await p.evaluate(() => loadAgents()); await p.waitForTimeout(600);
+    check(await p.isHidden('#side .agent[data-id="linkedin-desk"]'), 'Bot inside a closed group is hidden');
+    await p.click('#side .agent[data-grp="grp-software-bots"]'); await p.waitForTimeout(900);
+    check(await p.isVisible('#side .agent[data-id="linkedin-desk"]') && (await p.textContent('#hname')) === 'Software Bots', 'Group opens + group chat selected');
+    await p.fill('#inp', 'group hello'); await p.click('#sendBtn'); await p.waitForTimeout(1800);
+    check((await p.textContent('#msgs')).includes('Smoke test reply: group hello'), 'Group chat send + reply works');
+    await p.click('#side .agent[data-grp] .caret'); await p.waitForTimeout(300);
+    check(await p.isHidden('#side .agent[data-id="linkedin-desk"]'), 'Group closes with caret');
+    await p.click('#side .agent[data-id="mr-c"]'); await p.waitForTimeout(800);
     check(/v\d/.test(await p.textContent('#title')), 'Title shows version');
     await p.fill('#inp', 'hello'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
     check((await p.textContent('#msgs')).includes('Smoke test reply'), 'Chat send + reply works');
@@ -54,6 +66,8 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check(await p.inputValue('#dayAlert') === '60', 'Settings: daily alert loads');
     check(!(await p.isDisabled('#tmSave')), 'Settings: Save buttons enabled');
     check((await p.locator('#agentList .item').count()) >= 3, 'Settings: My agents list loads');
+    check(await p.isChecked('#zohoDrafts'), 'Settings: Zoho Books drafts ON by default');
+    check((await p.textContent('#groupList')).includes('Software Bots'), 'Settings: groups list loads');
     check((await p.textContent('#usageBox')).includes('₹0'), 'Settings: usage loads');
     await p.click('#tabSched'); await p.waitForTimeout(300); check(await p.isVisible('#sSave'), 'Schedules tab opens');
   } catch (e) { check(false, 'Unexpected: ' + e.message); }

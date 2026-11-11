@@ -1,10 +1,12 @@
 #!/bin/bash
-# Toshi Bot guard hook v0.5 rev A (10-11-2026)
+# Toshi Bot guard hook v0.6 rev A (11-11-2026)
+# v0.6: Zoho Books drafts (Kapil 11-11-2026): bots may create/edit estimates, sales orders, POs, invoices (draft, not sent),
+#       contacts and items when TOSHI_ZOHO_DRAFTS=1 (Settings toggle). Payments/expenses ask; deletes blocked; Zoho CRM read-only.
 # v0.5: Prabhu ToshiCrm connector tools allowed (Kapil option B: read + create/update; the connector has no delete tool).
 # v0.4 rev B: read-only lookups of any connector run without a card (Kapil's explicit yes, 10-11-2026).
 # v0.4: TOSHI_AUTOSEND=1 (Kapil's decision 10-11-2026) lets bots send email/WhatsApp/replies without the Haan card.
 # Runs before every MCP tool call (PreToolUse).
-#  1. Zoho Books / Zoho CRM writes: always BLOCKED (rule book: read-only).
+#  1. Zoho CRM writes: BLOCKED. Zoho Books: drafts allowed (v0.6), deletes blocked, payments/expenses ask.
 #  2. Tools Kapil approved with "Haan" in the chat app (env TOSHI_ALLOW): allowed.
 #  3. Sends, replies, forwards, deletes, trash, spam, file shares, Apollo writes: ask Kapil.
 #  4. Gmail drafts (create/update) and read-only Gmail/Zoho lookups: allowed, no prompt.
@@ -19,11 +21,37 @@ decide() {
   exit 0
 }
 
-# 1. Zoho writes: never
+# 1a. Zoho Books (v0.6): drafts allowed, payments/expenses ask, deletes and everything else blocked
+case "$t" in
+  *zoho*books*|*zohobooks*)
+    op="${t##*__}"
+    if printf '%s' "$op" | grep -Eq 'delete|void|remove|delink|merge'; then
+      decide deny "Toshi rule book: deleting in Zoho Books is blocked: $tool"
+    fi
+    if printf '%s' "$op" | grep -Eq 'create|update|upsert|convert|post|add|insert|approve|submit|mark|email|send'; then
+      for a in $TOSHI_ALLOW; do [ "$a" = "$tool" ] && decide allow "Approved by Kapil (Haan): $tool"; done
+      if [ "$TOSHI_ZOHO_DRAFTS" != "1" ]; then
+        decide deny "Zoho Books drafts are switched OFF in Toshi Bot Settings. Blocked: $tool"
+      fi
+      if printf '%s' "$op" | grep -Eq '^(create|update)_(estimate|sales_order|purchase_order|invoice|contact|item)$'; then
+        if printf '%s' "$input" | grep -Eiq '"(send|send_email|is_email|mark_as_sent|status)"[[:space:]]*:[[:space:]]*(true|"true"|"sent")'; then
+          decide ask "Zoho Books: sending/marking the document as sent needs Kapil's Haan: $tool"
+        fi
+        decide allow "Zoho Books draft (Kapil 11-11-2026): $tool"
+      fi
+      if printf '%s' "$op" | grep -Eq 'payment|expense'; then
+        decide ask "Zoho Books payment/expense needs Kapil's Haan: $tool"
+      fi
+      decide deny "Toshi rule book: in Zoho Books bots may only make drafts (estimate, sales order, PO, invoice, contact, item). Blocked: $tool"
+    fi
+    ;;
+esac
+
+# 1b. Zoho CRM writes: never
 case "$t" in
   *zoho*)
     if printf '%s' "$t" | grep -Eq 'create|update|delete|upsert|convert|post|add|delink|insert|remove|merge'; then
-      decide deny "Toshi rule book: Zoho Books and Zoho CRM are read-only. Blocked: $tool"
+      decide deny "Toshi rule book: Zoho CRM is read-only (use ToshiCrm). Blocked: $tool"
     fi
     ;;
 esac
