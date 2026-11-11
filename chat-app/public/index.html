@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.9 rev A (11-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.9 rev B (11-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,7 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.m .more{border:0;background:none;color:inherit;opacity:.8;font-size:12px;padding:4px 0 0;cursor:pointer;text-decoration:underline}
 .btn.mv{padding:2px 8px;min-width:0;font-size:12px}
 .ic.grpic{background:linear-gradient(160deg,#24427a,#1b3260);display:grid;place-items:center;font-size:21px}
 .agent .caret{color:var(--muted);font-size:12px;padding:6px 4px;flex:none}
@@ -622,7 +623,12 @@ function md(text) {
 function bubble(who, text) { const d = el('div', 'm ' + who); d.innerHTML = md(text); return d; }
 function addMsg(who, text, at) {
   const empty = $('msgs').querySelector('.empty'); if (empty) empty.remove();
-  const d = bubble(who, text); if (at) d.append(el('span', 'at', at)); $('msgs').append(d); scroll(); return d;
+  // v1.9 rev B: long scheduled / handoff instructions show short (first line + a few words); tap to see all
+  const long = who === 'me' && /^(⏰|📨)/.test(text) && text.length > 160;
+  const shortText = long ? text.split('\n')[0] + '\n' + text.split('\n').slice(1).join(' ').slice(0, 90) + '…' : text;
+  const d = bubble(who, shortText);
+  if (long) { const more = el('button', 'more', '▸ Poora dekhein'); more.type = 'button'; more.onclick = () => { const open = more.textContent.startsWith('▸'); d.querySelector('.txt').innerHTML = md(open ? text : shortText); more.textContent = open ? '▾ Chhota karein' : '▸ Poora dekhein'; }; d.innerHTML = ''; const t = el('div', 'txt'); t.innerHTML = md(shortText); d.append(t, more); }
+  if (at) d.append(el('span', 'at', at)); $('msgs').append(d); scroll(); return d;
 }
 function addApproval(items) {
   const box = el('div', 'ask'); box.append(el('b', null, 'Needs your OK'));

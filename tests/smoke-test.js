@@ -6,7 +6,11 @@ const fs = require('fs'), os = require('os'), path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'toshi-smoke-'));
 execSync(`cp -a "${ROOT}/." "${tmp}/"`); fs.rmSync(path.join(tmp, '.git'), { recursive: true, force: true });
+// v1.9 rev B: on the Mac, icloud/ is a LINK to the real iCloud data. Never let the test touch it.
+try { if (fs.lstatSync(path.join(tmp, 'icloud')).isSymbolicLink()) fs.unlinkSync(path.join(tmp, 'icloud')); else fs.rmSync(path.join(tmp, 'icloud'), { recursive: true, force: true }); } catch {}
 fs.mkdirSync(path.join(tmp, 'icloud'), { recursive: true });
+if (!fs.realpathSync(path.join(tmp, 'icloud')).startsWith(fs.realpathSync(tmp))) { console.error('STOP: test data folder is not private. Not running.'); process.exit(2); }
+fs.writeFileSync(path.join(tmp, 'icloud', 'schedules.json'), '[]'); // no real schedules in the test
 const fixture = { ntfyTopic: 'toshi-smoke123', notify: true, autoSend: true, dailyAlertRuns: 60,
   team: { enabled: true, group: 'Toshi Bot Team', trigger: '@Toshi', members: 'Manoj, 9315950722\nBobby, 9315950739', topics: 'Order status', interval: 120, model: 'sonnet',
     refreshOn: true, refreshTimes: '08:00', refreshAgent: 'mr-c', sources: 'Zoho', lastRefresh: 'x' } };
@@ -50,6 +54,11 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check(/v\d/.test(await p.textContent('#title')), 'Title shows version');
     await p.fill('#inp', 'hello'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
     check((await p.textContent('#msgs')).includes('Smoke test reply'), 'Chat send + reply works');
+    // v1.9 rev B: long scheduled message shows short
+    await p.evaluate(() => addMsg('me', '⏰ Scheduled 19:00 IST\n' + 'LinkedIn evening desk steps '.repeat(20), 'x'));
+    const lm = p.locator('#msgs .m.me').last();
+    check((await lm.textContent()).length < 200 && (await lm.locator('.more').count()) === 1, 'Long scheduled message is short');
+    await lm.locator('.more').click(); check((await lm.textContent()).length > 400, 'Poora dekhein shows full text');
     // v1.6 queue: type while the bot works
     await p.fill('#inp', 'slowtask one'); await p.click('#sendBtn'); await p.waitForTimeout(400);
     check(!(await p.isDisabled('#sendBtn')) && (await p.isVisible('#stopBtn')), 'Send stays open + stop button while working');
