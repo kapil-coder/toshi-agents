@@ -10,7 +10,8 @@ execSync(`cp -a "${ROOT}/." "${tmp}/"`); fs.rmSync(path.join(tmp, '.git'), { rec
 try { if (fs.lstatSync(path.join(tmp, 'icloud')).isSymbolicLink()) fs.unlinkSync(path.join(tmp, 'icloud')); else fs.rmSync(path.join(tmp, 'icloud'), { recursive: true, force: true }); } catch {}
 fs.mkdirSync(path.join(tmp, 'icloud'), { recursive: true });
 if (!fs.realpathSync(path.join(tmp, 'icloud')).startsWith(fs.realpathSync(tmp))) { console.error('STOP: test data folder is not private. Not running.'); process.exit(2); }
-fs.writeFileSync(path.join(tmp, 'icloud', 'schedules.json'), '[]'); // no real schedules in the test
+// two disabled-by-time schedules for one bot (times far from now never fire: the test runs < 2 min) -> one compact panel line
+fs.writeFileSync(path.join(tmp, 'icloud', 'schedules.json'), JSON.stringify([{ id: 's1', agent: 'linkedin-desk', task: 't', times: ['09:00'], days: [7], enabled: true }, { id: 's2', agent: 'linkedin-desk', task: 't', times: ['10:00', '09:00'], days: [7], enabled: true }]));
 const fixture = { ntfyTopic: 'toshi-smoke123', notify: true, autoSend: true, dailyAlertRuns: 60,
   team: { enabled: true, group: 'Toshi Bot Team', trigger: '@Toshi', members: 'Manoj, 9315950722\nBobby, 9315950739', topics: 'Order status', interval: 120, model: 'sonnet',
     refreshOn: true, refreshTimes: '08:00', refreshAgent: 'mr-c', sources: 'Zoho', lastRefresh: 'x' } };
@@ -54,6 +55,7 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check(/v\d/.test(await p.textContent('#title')), 'Title shows version');
     await p.fill('#inp', 'hello'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
     check((await p.textContent('#msgs')).includes('Smoke test reply'), 'Chat send + reply works');
+    check((await p.locator('#schedPanel .sched').count()) === 1 && (await p.textContent('#schedPanel')).includes('09:00 10:00'), 'Scheduled panel: one compact line per bot');
     // v1.9 rev B: long scheduled message shows short
     await p.evaluate(() => addMsg('me', '⏰ Scheduled 19:00 IST\n' + 'LinkedIn evening desk steps '.repeat(20), 'x'));
     const lm = p.locator('#msgs .m.me').last();

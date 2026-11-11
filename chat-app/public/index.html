@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.9 rev B (11-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.9 rev C (11-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -265,8 +265,8 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
       <div class="row"><span>Memory free</span><span id="sMem">…</span></div>
       <div class="row"><span>iCloud</span><span id="sIcloud">…</span></div>
       <h4>Safety</h4>
-      <div class="note">Zoho Books and CRM: read-only (blocked by guard).</div>
-      <div class="note">Sends, replies, deletes: need your Haan.</div>
+      <div class="note">Zoho Books: drafts only. Zoho CRM: read-only.</div>
+      <div class="note">Sends: auto when you ask. Deletes, payments: need your Haan.</div>
       <h4>Scheduled</h4>
       <div id="schedPanel"><div class="note">None yet</div></div>
       <div class="note"><button class="ghost" id="openAuto2" type="button">Manage schedules</button></div>
@@ -926,6 +926,7 @@ async function loadSched() {
   const list = await (await fetch('/api/schedules')).json();
   const box = $('schedList'); box.replaceChildren(); const pan = $('schedPanel'); pan.replaceChildren();
   if (!list.length) { box.append(el('div', 'note', 'No schedules yet. Add one below.')); pan.append(el('div', 'note', 'None yet')); }
+  const perBot = new Map(); // v1.9 rev C: one compact line per bot, all its times together
   for (const s of list) {
     const a = agents.find(x => x.id === s.agent); const nm = a ? a.name : s.agent;
     const it = el('div', 'item' + (s.enabled ? '' : ' off'));
@@ -936,7 +937,11 @@ async function loadSched() {
     const tg = el('button', 'btn', s.enabled ? 'Pause' : 'Turn on'); tg.onclick = () => post('/api/schedules', { action: 'toggle', id: s.id }).then(loadSched);
     let armed = false; const del = el('button', 'btn', 'Delete'); del.onclick = () => { if (!armed) { armed = true; del.textContent = 'Sure? Tap again'; return; } post('/api/schedules', { action: 'delete', id: s.id }).then(loadSched); };
     btns.append(run, tg, del); it.append(btns); box.append(it);
-    if (s.enabled) { const r = el('div', 'sched'); r.append(el('span', null, nm), el('span', null, s.times.join(' '))); pan.append(r); }
+    if (s.enabled) { const k = s.agent; if (!perBot.has(k)) perBot.set(k, { nm, times: new Set() }); s.times.forEach(t => perBot.get(k).times.add(t)); }
+  }
+  for (const [id, { nm, times }] of perBot) {
+    const r = el('div', 'sched'); r.title = 'Open ' + nm; r.style.cursor = 'pointer'; r.onclick = () => selectChat(id);
+    r.append(el('span', null, nm), el('span', null, [...times].sort().join(' '))); pan.append(r);
   }
 }
 function openAuto(tab) {
