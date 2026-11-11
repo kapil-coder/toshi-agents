@@ -31,7 +31,7 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     await p.fill('#agentQ', 'zzzz'); await p.waitForTimeout(150); check(await p.isVisible('#side .nores'), 'Agent search: no result note');
     await p.fill('#agentQ', ''); await p.waitForTimeout(150);
     await p.click('#side .agent[data-id="linkedin-desk"]'); await p.waitForTimeout(800); await p.click('#pinBtn'); await p.waitForTimeout(900);
-    check((await p.getAttribute('#side .agent[data-id]', 'data-id')) === 'linkedin-desk' && (await p.textContent('#pinBtn')).includes('Pinned'), 'Pin moves bot to top');
+    check((await p.getAttribute('#side .agent[data-id]:nth-of-type(1)', 'data-id')) === 'mr-c' && (await p.locator('#side .agent[data-id]').nth(1).getAttribute('data-id')) === 'linkedin-desk' && (await p.textContent('#pinBtn')).includes('Pinned'), 'Pin moves bot to top (under Mr. C)');
     await p.click('#pinBtn'); await p.waitForTimeout(700);
     await p.click('#side .agent[data-id="mr-c"]'); await p.waitForTimeout(800);
     check((await p.textContent('#micLang')) === 'EN', 'Mic default is EN');
@@ -67,6 +67,12 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check(!(await p.isDisabled('#tmSave')), 'Settings: Save buttons enabled');
     check((await p.locator('#agentList .item').count()) >= 3, 'Settings: My agents list loads');
     check(await p.isChecked('#zohoDrafts'), 'Settings: Zoho Books drafts ON by default');
+    // v1.9 order: move LinkedIn Desk up -> first after Mr. C (it is ungrouped again after group test? ensure ungrouped)
+    await p.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'agentGroup', id: 'linkedin-desk', gid: '' }) }));
+    for (let k = 0; k < 3; k++) { await p.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'move', id: 'linkedin-desk', dir: -1 }) })); }
+    const ids = await p.evaluate(() => fetch('/api/agents').then(r => r.json()).then(l => l.map(a => a.id)));
+    check(ids[0] === 'mr-c' && ids[1] === 'linkedin-desk', 'Order: Mr. C first, moved bot goes up');
+    check(await p.locator('#agentList button.mv').count() >= 2, 'Settings: ▲ ▼ buttons show');
     check((await p.textContent('#groupList')).includes('Software Bots'), 'Settings: groups list loads');
     check((await p.textContent('#usageBox')).includes('₹0'), 'Settings: usage loads');
     await p.click('#tabSched'); await p.waitForTimeout(300); check(await p.isVisible('#sSave'), 'Schedules tab opens');

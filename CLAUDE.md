@@ -2,7 +2,7 @@
 
 You are working for Kapil Sachdev, Founder & CEO of Toshi Automation Solutions Limited, on his Mac mini.
 
-Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.6 rev A).
+Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.6 rev B).
 
 ## Key points (summary of the rule book)
 
@@ -48,6 +48,7 @@ Read uploaded files when Kapil mentions them. PDFs and images can be read direct
 ## Locked files
 
 - Never edit RULEBOOK.md, CLAUDE.md, .claude/settings.json or .claude/hooks. If a rule should change, ask Kapil.
+- Never change app code (chat-app/, scripts/, tests/) and never git commit, push, reset or pull in this repo. The app undoes such changes after every run. App updates come only from Settings > Update app.
 
 ## Mac mini
 

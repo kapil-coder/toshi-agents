@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.8 rev A';
+const VERSION = 'v1.9 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -137,7 +137,9 @@ function runClaude(agent, message, opts, onEvent) {
   // Own browser per agent (LinkedIn Desk and Mr. C keep the shared profile with the LinkedIn login)
   const env = { ...process.env, TOSHI_ALLOW: allow.join(' '), TOSHI_AGENT: agent, TOSHI_HOP: String(opts.hop || 0),
     TOSHI_PORT: String(PORT), TOSHI_SHOW_BROWSER: getSettings().showBrowser ? '1' : '', TOSHI_STRICT_SEND: STRICT_SEND_RE.test(agent + ' ' + agentName(agent)) ? '1' : '',
-    TOSHI_AUTOSEND: autoSendOn(agent) ? '1' : '', TOSHI_ZOHO_DRAFTS: getSettings().zohoDrafts !== false ? '1' : '' };
+    TOSHI_AUTOSEND: autoSendOn(agent) ? '1' : '', TOSHI_ZOHO_DRAFTS: getSettings().zohoDrafts !== false ? '1' : '',
+    // v1.9: bots cannot commit/push in the app repo (git hooks only for bot runs)
+    GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.hooksPath', GIT_CONFIG_VALUE_0: path.join(PROJECT, 'chat-app', 'git-guard') };
   if (!SHARED_BROWSER.has(agent)) {
     env.TOSHI_BROWSER_PROFILE = path.join(os.homedir(), '.toshi-agents', 'chrome-profiles', agent);
     env.TOSHI_BROWSER_OUTPUT = path.join(os.homedir(), '.toshi-agents', 'browser-output', agent);
@@ -180,9 +182,50 @@ function runClaude(agent, message, opts, onEvent) {
     if (denials.length) onEvent({ t: 'approve', v: denials });
     if (!finalText.length && code !== 0) onEvent({ t: 'error', v: (errText || 'Claude Code stopped (code ' + code + ').').slice(-600) });
     onEvent({ t: 'done' });
+    protectRepo(agent); // v1.9: undo any bot change to app files / commits
     setTimeout(() => drainQueue(agent), 800); // v1.6: next queued message
   });
   return child;
+}
+
+// ---------- v1.9 repo protection: app code + locked files change only through Update app ----------
+// After every bot run: tracked files changed by a bot are saved to iCloud backups and restored;
+// a bot commit is kept on a backup branch and HEAD goes back to the good version. git pull to GitHub's version is accepted.
+let goodHead = '';
+const gitRun = args => new Promise(r => execFile('git', args, { cwd: PROJECT, timeout: 30000 }, (e, o, er) => r({ e, out: String(o || '').trim(), err: String(er || '') })));
+gitRun(['rev-parse', 'HEAD']).then(r => { if (!r.e) goodHead = r.out; });
+let protecting = false;
+async function protectRepo(agent) {
+  if (protecting || !goodHead) return; protecting = true;
+  try {
+    const notes = [], tag = nowIST().date + '-' + Date.now();
+    const st = await gitRun(['diff', '--name-only', 'HEAD']);
+    const files = st.e ? [] : st.out.split('\n').map(l => l.trim()).filter(Boolean);
+    if (files.length) {
+      const d = await gitRun(['diff', 'HEAD']); const dir = path.join(STORE, 'backups'); fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'bot-change-' + agent + '-' + tag + '.diff'), d.out);
+      await gitRun(['checkout', 'HEAD', '--', ...files]);
+      notes.push('restored ' + files.join(', '));
+    }
+    const h = await gitRun(['rev-parse', 'HEAD']);
+    if (!h.e && h.out !== goodHead) {
+      const up = await gitRun(['merge-base', '--is-ancestor', 'HEAD', 'origin/main']);
+      if (!up.e) goodHead = h.out; // HEAD is GitHub's version (e.g. a pull): fine
+      else { await gitRun(['branch', 'bot-commit-' + tag, 'HEAD']); await gitRun(['reset', '--hard', goodHead]); notes.push('a commit was moved to branch bot-commit-' + tag); }
+    }
+    if (notes.length && validAgent(agent)) {
+      const c = loadChat(agent);
+      c.messages.push({ who: 'bot', text: '🔒 Toshi Bot: app files are locked for bots (only Update app changes them). ' + notes.join('; ') + '. A copy is in iCloud/ToshiAgents/backups.', at: stamp() });
+      saveChat(agent, c);
+    }
+  } catch {} finally { protecting = false; }
+}
+
+// ---------- v1.9 bot order: Mr. C always first, then pinned, then Kapil's order ----------
+function orderedAgents(list) {
+  const ord = getSettings().order || []; const pos = id => { const i = ord.indexOf(id); return i < 0 ? 1e6 : i; };
+  const rest = list.filter(a => a.id !== 'mr-c').map((a, k) => ({ a, k })).sort((x, y) => pos(x.a.id) - pos(y.a.id) || x.k - y.k).map(x => x.a);
+  return [...list.filter(a => a.id === 'mr-c'), ...rest.filter(a => a.pinned), ...rest.filter(a => !a.pinned)];
 }
 
 // ---------- v1.6 message queue: type while a bot works; queued messages run one by one ----------
@@ -732,7 +775,7 @@ const server = http.createServer(async (req, res) => {
         const pins = getSettings().pins || []; // v1.7: pinned bots first
         const list = listAgents().map(a => ({ ...a, group: groupOf(a.id), busy: running.has(a.id), unread: !!loadChat(a.id).unread, icon: icons[a.id] || '', pinned: pins.includes(a.id),
           photo: ['png', 'jpg', 'jpeg', 'webp'].some(e => fs.existsSync(path.join(adir, a.id + '.' + e))) }));
-        return json(res, 200, [...list.filter(a => a.pinned), ...list.filter(a => !a.pinned)]); }
+        return json(res, 200, orderedAgents(list)); }
     if (req.method === 'GET' && url.pathname === '/api/groups') return json(res, 200, getGroups().map(g => ({ ...g, busy: running.has(g.id), unread: !!loadChat(g.id).unread })));
     if (req.method === 'GET' && url.pathname === '/api/status') {
       return json(res, 200, {
@@ -866,12 +909,23 @@ const server = http.createServer(async (req, res) => {
       const git = (args, cb) => execFile('git', args, { cwd: PROJECT, timeout: 60000 }, (e, out, err) => cb(e, String(out || ''), String(err || '')));
       return git(['status', '--porcelain', '--untracked-files=no'], (e0, changed) => {
         const files = changed.split('\n').filter(l => l.trim()).map(l => l.slice(3).trim());
-        const go = () => git(['rev-parse', 'HEAD'], (eh, oldHead) => git(['pull', '--ff-only'], (e, out, err) => {
+        // v1.9: fetch, keep any local commit on a backup branch, then move to GitHub's version (no more "diverging branches")
+        const pull = cb => git(['fetch', 'origin', 'main'], (ef, o1, er1) => {
+          if (ef) return cb(ef, '', er1);
+          git(['rev-parse', 'HEAD'], (e2, h) => git(['rev-parse', 'origin/main'], (e3, r) => {
+            if (h.trim() === r.trim()) return cb(null, 'Already up to date', '');
+            git(['rev-list', '--count', 'origin/main..HEAD'], (e4, n) => {
+              const reset = () => git(['reset', '--hard', 'origin/main'], (e5, o5, er5) => { if (!e5) goodHead = r.trim(); cb(e5, 'Updated', er5); });
+              if (Number(n) > 0) git(['branch', 'local-backup-' + nowIST().date + '-' + Date.now(), 'HEAD'], reset); else reset();
+            });
+          }));
+        });
+        const go = () => git(['rev-parse', 'HEAD'], (eh, oldHead) => pull((e, out, err) => {
           if (e) return json(res, 500, { error: 'Update failed: ' + (err || e.message).slice(-400) });
           // v1.3 rev E: safety check of the new version; if anything is wrong, roll back to the old version automatically
           const problem = checkNewVersion();
           if (problem && oldHead.trim()) {
-            return git(['reset', '--hard', oldHead.trim()], () => json(res, 500, { error: 'The new version failed its safety check (' + problem + '). Toshi Bot stayed on the old version. Tell Mr. C.' }));
+            return git(['reset', '--hard', oldHead.trim()], () => { goodHead = oldHead.trim(); json(res, 500, { error: 'The new version failed its safety check (' + problem + '). Toshi Bot stayed on the old version. Tell Mr. C.' }); });
           }
           const head = out.includes('Already up to date') ? 'Already up to date.' : 'Updated. Restarting…';
           json(res, 200, { ok: true, msg: head, restart: !out.includes('Already up to date') });
@@ -1001,6 +1055,21 @@ const server = http.createServer(async (req, res) => {
         if (b.action === 'pin') {
           if (!validAgent(b.id)) return json(res, 404, { error: 'Agent not found.' });
           const p = (s.pins || []).filter(x => x !== b.id && validAgent(x)); if (b.on) p.push(b.id); s.pins = p; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
+        }
+        if (b.action === 'move') {
+          // up/down among bots of the same group (and same pinned state); Mr. C stays first
+          const pins = s.pins || [];
+          const list = orderedAgents(listAgents().map(a => ({ ...a, pinned: pins.includes(a.id) }))).filter(a => a.id !== 'mr-c');
+          const i = list.findIndex(a => a.id === b.id); if (i < 0) return json(res, 404, { error: 'Agent not found.' });
+          const same = a => groupOf(a.id) === groupOf(b.id) && a.pinned === list[i].pinned, dir = Number(b.dir) < 0 ? -1 : 1;
+          for (let j = i + dir; j >= 0 && j < list.length; j += dir) if (same(list[j])) { [list[i], list[j]] = [list[j], list[i]]; break; }
+          s.order = list.map(a => a.id); writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
+        }
+        if (b.action === 'groupMove') {
+          const g = getGroups(), i = g.findIndex(x => x.id === b.gid), j = i + (Number(b.dir) < 0 ? -1 : 1);
+          if (i < 0) return json(res, 404, { error: 'Group not found.' });
+          if (j >= 0 && j < g.length) [g[i], g[j]] = [g[j], g[i]];
+          const st = getSettings(); st.groups = g; writeJSON(SETTINGS_FILE, st); return json(res, 200, { ok: true });
         }
         if (b.action === 'zohoDrafts') { s.zohoDrafts = !!b.on; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'groupAdd' || b.action === 'groupRename') {

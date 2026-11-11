@@ -1,0 +1,4 @@
+#!/bin/sh
+# Toshi Bot v1.9: bots may not commit to the app repo (Kapil's rule). Kapil's own Terminal is not affected.
+echo "Toshi rule book: bots may not push from toshi-agents. App updates come only from GitHub (Settings > Update app)." >&2
+exit 1

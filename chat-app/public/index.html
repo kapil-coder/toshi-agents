@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.8 rev A (11-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v1.9 rev A (11-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,7 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.btn.mv{padding:2px 8px;min-width:0;font-size:12px}
 .ic.grpic{background:linear-gradient(160deg,#24427a,#1b3260);display:grid;place-items:center;font-size:21px}
 .agent .caret{color:var(--muted);font-size:12px;padding:6px 4px;flex:none}
 .agent.sub{margin-left:12px;width:calc(100% - 12px);border-left:2px dashed var(--line);border-radius:0 8px 8px 0}
@@ -405,7 +406,7 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
       <div class="note">Put a bot in a group with its "Group" box below. Delete a group = its bots go back to the main list (bots are not deleted).</div>
       <h4 style="margin:10px 0 0">My agents</h4>
       <div class="list" id="agentList"></div>
-      <div class="note">Delete moves the agent to an archive folder (not lost). Its chat history stays in iCloud. Built-in agents can't be deleted.</div>
+      <div class="note">▲ ▼ changes the order (inside a group too). Mr. C always stays on top. Delete moves the agent to an archive folder (not lost). Its chat history stays in iCloud. Built-in agents can't be deleted.</div>
       <h4 style="margin:10px 0 0">Approved for all bots</h4>
       <div class="list" id="allowAllList"></div>
       <h4 style="margin:10px 0 0">Mac folders agents may use</h4>
@@ -1015,6 +1016,11 @@ async function loadSettings() {
   for (const a of agents) {
     const it = el('div', 'item'); const top = el('div', 'top'); top.append(el('b', null, a.name), el('span', 'meta', a.id));
     const builtIn = ['mr-c', 'investor-desk', 'linkedin-desk'].includes(a.id);
+    if (a.id !== 'mr-c') for (const [ic, dir] of [['▲', -1], ['▼', 1]]) { // v1.9 order (Mr. C always first)
+      const mv = el('button', 'btn mv', ic); mv.type = 'button'; mv.title = dir < 0 ? 'Move up' : 'Move down'; mv.dataset.mv = a.id + (dir < 0 ? ':up' : ':down');
+      mv.onclick = () => post('/api/settings', { action: 'move', id: a.id, dir }).then(() => loadAgents().then(loadSettings)).catch(e => { alertBox(e.message); });
+      top.insertBefore(mv, top.querySelector('b'));
+    }
     if (builtIn) top.append(el('span', 'meta', '· built-in'));
     const ms = el('select'); ms.style.cssText = 'border:1px solid var(--line);border-radius:8px;padding:5px 8px;background:var(--surface);font-size:12px';
     for (const [v, t] of [['', 'Model: default'], ['opus', 'Opus (smartest)'], ['sonnet', 'Sonnet (saves limits)'], ['haiku', 'Haiku (lightest)']]) ms.add(new Option(t, v));
@@ -1097,6 +1103,7 @@ function loadGroupList() {
   if (!groups.length) box.append(el('div', 'note', 'No groups yet.'));
   for (const g of groups) {
     const it = el('div', 'item'), top = el('div', 'top'); const n = agents.filter(a => a.group === g.id).length;
+    for (const [ic, dir] of [['▲', -1], ['▼', 1]]) { const mv = el('button', 'btn mv', ic); mv.type = 'button'; mv.title = dir < 0 ? 'Move up' : 'Move down'; mv.onclick = () => post('/api/settings', { action: 'groupMove', gid: g.id, dir }).then(() => loadAgents().then(loadSettings)).catch(() => {}); top.append(mv); }
     top.append(el('b', null, '📂 ' + g.name), el('span', 'meta', n + ' bot' + (n === 1 ? '' : 's')));
     const rn = el('button', 'btn', 'Rename'); rn.type = 'button';
     rn.onclick = () => { const v = prompt('New name for the group', g.name); if (v && v.trim()) post('/api/settings', { action: 'groupRename', gid: g.id, name: v.trim() }).then(() => loadAgents().then(loadSettings)).catch(e => { $('groupMsg').textContent = e.message; }); };
