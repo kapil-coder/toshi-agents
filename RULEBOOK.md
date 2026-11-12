@@ -1,6 +1,6 @@
 # Toshi Bot: Golden Rule Book
 
-Version: v0.6 rev C | Date: 11-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
+Version: v0.7 rev A | Date: 11-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
 
 This rule book applies to every Toshi Bot agent run with Claude Code on the Mac mini. (Product renamed from "Toshi Agents" to "Toshi Bot" on 09-11-2026; folder and repo names stay toshi-agents.)
 Each agent's own charter (kept privately in iCloud) adds detail. If they disagree, the stricter rule wins.
@@ -13,12 +13,12 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Claude Code | 2.1.x (keep updated with `claude update`) |
 | Node.js | Current LTS (needed for the browser tool) |
 | Playwright MCP (browser tool) | 0.0.83 (pinned), connects to each bot's hidden Chrome via scripts/browser-mcp.sh v0.9 rev B |
-| Rule book | v0.6 rev C |
+| Rule book | v0.7 rev A |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
 | Guard hook | v0.5 rev A |
-| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings, update safety, ToshiCrm connector + key box + key check, bot icons + photos, lively icons, message queue + stop button, bot search + pin, mic EN default, bot groups, Zoho Books drafts, bot order, repo lock, safe update, short scheduled messages, compact schedule panel, visible run errors, lost-session auto-retry) | v1.9 rev E |
+| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings, update safety, ToshiCrm connector + key box + key check, bot icons + photos, lively icons, message queue + stop button, bot search + pin, mic EN default, bot groups, Zoho Books drafts, bot order, repo lock, safe update, short scheduled messages, compact schedule panel, visible run errors, lost-session auto-retry, permanent memory, ↻ redo) | v2.0 rev A |
 
 ## 2. Rules for every agent
 
@@ -126,6 +126,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v0.7 rev A | 12-11-2026 | App v2.0 rev A: permanent memory. Each bot + shared memory in iCloud/ToshiAgents/memory (12 KB each, warning at 80%, full at 100%, daily backup 30 days). "Yaad rakho / remember" saves a point; bots auto-save key points when a session ends. Settings > 🧠 Memory to view/edit. ↻ Dobara chalao on failed runs. |
 | v0.6 rev C+++ | 12-11-2026 | App v1.9 rev E: if Claude cannot find a bot's saved session, the app starts a fresh session with the last messages and retries once (fixed Whatsapp Bot); no 3 s stdin wait per run. |
 | v0.6 rev C++ | 12-11-2026 | App v1.9 rev D: a bot run that ends with no reply now leaves a ⚠️ note with the reason in the chat (and a phone alert for scheduled/handoff runs). |
 | v0.6 rev C+ | 11-11-2026 | App v1.9 rev C: Scheduled panel shows one line per bot (all times together, tap to open); Safety panel text updated (Zoho Books drafts). |

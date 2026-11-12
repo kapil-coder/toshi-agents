@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v1.9 rev E (12-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.0 rev A (12-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,10 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.memrow{padding:8px 0;border-top:1px solid var(--line)}.memrow .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.membar{height:7px;border-radius:4px;background:var(--line);margin:6px 0 2px;overflow:hidden}.membar i{display:block;height:100%}
+.memrow textarea{width:100%;box-sizing:border-box;min-height:140px;margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;font:12px/1.4 var(--f-mono,monospace);background:var(--surface-2);color:inherit}
+.m .redo{margin-top:6px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:3px 10px;font-size:12px;cursor:pointer;color:inherit}
 .m .more{border:0;background:none;color:inherit;opacity:.8;font-size:12px;padding:4px 0 0;cursor:pointer;text-decoration:underline}
 .btn.mv{padding:2px 8px;min-width:0;font-size:12px}
 .ic.grpic{background:linear-gradient(160deg,#24427a,#1b3260);display:grid;place-items:center;font-size:21px}
@@ -398,6 +402,9 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
       </div>
       <div class="note">Each bot loads only the connectors ticked for it (tap "Connectors" on a bot below). Recommended: WhatsApp bots = browser only; others = browser, Gmail, Google, Zoho, Apollo. Chats also start fresh automatically after 15 messages.</div>
       <div class="msg" id="saveMsg"></div>
+      <h4 style="margin:10px 0 0">🧠 Memory</h4>
+      <div class="note">Bots remember for long term. Say "yaad rakho …" / "remember …" (add "sab bots" / "all bots" for shared). 🟠 at 80%, 🔴 full at 12 KB: then clean up here. Daily backup in iCloud (30 days).</div>
+      <div id="memList"><div class="note">Loading…</div></div>
       <h4 style="margin:10px 0 0">📂 Groups</h4>
       <div class="list" id="groupList"></div>
       <div class="f2">
@@ -628,6 +635,11 @@ function addMsg(who, text, at) {
   const shortText = long ? text.split('\n')[0] + '\n' + text.split('\n').slice(1).join(' ').slice(0, 90) + '…' : text;
   const d = bubble(who, shortText);
   if (long) { const more = el('button', 'more', '▸ Poora dekhein'); more.type = 'button'; more.onclick = () => { const open = more.textContent.startsWith('▸'); d.querySelector('.txt').innerHTML = md(open ? text : shortText); more.textContent = open ? '▾ Chhota karein' : '▸ Poora dekhein'; }; d.innerHTML = ''; const t = el('div', 'txt'); t.innerHTML = md(shortText); d.append(t, more); }
+  if (who === 'bot' && /^⚠️ (Could not run|Finished without a reply)/.test(text)) { // v2.0: ↻ run the task before it again
+    const prev = [...$('msgs').querySelectorAll('.m.me')].pop();
+    if (prev && prev.dataset.full) { const rb = el('button', 'redo', '↻ Dobara chalao'); rb.type = 'button'; rb.onclick = () => { rb.disabled = true; let t = prev.dataset.full; if (/^(⏰|📨)/.test(t)) t = t.split('\n').slice(1).join('\n'); send(t.trim()); }; d.append(rb); }
+  }
+  if (who === 'me') d.dataset.full = text;
   if (at) d.append(el('span', 'at', at)); $('msgs').append(d); scroll(); return d;
 }
 function addApproval(items) {
@@ -1015,6 +1027,7 @@ async function loadSettings() {
   $('autoSend').checked = s.autoSend !== false;
   $('zohoDrafts').checked = s.zohoDrafts !== false;
   loadGroupList();
+  loadMemory().catch(() => { $('memList').textContent = 'Memory not available.'; });
   $('dayAlert').value = s.dailyAlertRuns || '';
   fetch('/api/sends').then(r => r.json()).then(list => {
     const box = $('sendList'); box.replaceChildren();
@@ -1109,6 +1122,28 @@ async function loadSettings() {
 $('dayAlertSave').onclick = () => post('/api/settings', { action: 'dailyAlert', runs: $('dayAlert').value }).then(() => { $('saveMsg').textContent = 'Alert saved ✓'; });
 $('recAll').onclick = () => post('/api/settings', { action: 'recommendedAll' }).then(() => { $('saveMsg').textContent = 'Recommended connectors applied to all bots ✓'; loadSettings(); });
 $('zohoDrafts').onchange = () => post('/api/settings', { action: 'zohoDrafts', on: $('zohoDrafts').checked }).catch(() => {});
+async function loadMemory() {
+  const list = await (await fetch('/api/memory')).json(); const box = $('memList'); box.replaceChildren();
+  for (const m of list) {
+    if (m.id.startsWith('grp-') && !m.size) continue; // empty group memories hidden
+    const pct = Math.min(100, Math.round(m.size * 100 / m.limit)), col = pct >= 100 ? 'var(--bad)' : pct >= 80 ? '#e0a92e' : 'var(--ok)';
+    const r = el('div', 'memrow'); r.dataset.mem = m.id; const top = el('div', 'top');
+    const ed = el('button', 'btn', 'View / Edit'); ed.type = 'button'; top.append(el('b', null, m.name), ed);
+    const bar = el('div', 'membar'); const i = el('i'); i.style.width = pct + '%'; i.style.background = col; bar.append(i);
+    const kb = x => x && x < 103 ? '<0.1' : (x / 1024).toFixed(1);
+    const info = el('div', 'note', (pct >= 100 ? '⛔ Full: new points are not saved until you clean up · ' : pct >= 80 ? '⚠️ Clean up soon · ' : '') + kb(m.size) + ' of ' + kb(m.limit) + ' KB · ' + m.points + (m.points === 1 ? ' point' : ' points') + (m.updated ? ' · updated ' + new Date(m.updated).toLocaleDateString('en-GB').replace(/\//g, '-') : ''));
+    if (pct >= 80) info.style.color = col;
+    ed.onclick = async () => {
+      const open = r.querySelector('textarea'); if (open) { open.remove(); r.querySelector('.btns') && r.querySelector('.btns').remove(); return; }
+      const d = await (await fetch('/api/memory?agent=' + encodeURIComponent(m.id))).json();
+      const ta = el('textarea'); ta.value = d.text; ta.placeholder = '- one point per line';
+      const bt = el('div', 'btns'); const sv = el('button', 'btn pri', 'Save memory'); sv.type = 'button'; const msg = el('span', 'msg');
+      sv.onclick = () => post('/api/memory', { agent: m.id, text: ta.value }).then(() => { msg.textContent = 'Saved ✓'; loadMemory(); }).catch(e => { msg.textContent = e.message; });
+      bt.append(sv, msg); r.append(ta, bt);
+    };
+    r.append(top, bar, info); box.append(r);
+  }
+}
 function loadGroupList() {
   const box = $('groupList'); box.replaceChildren();
   if (!groups.length) box.append(el('div', 'note', 'No groups yet.'));

@@ -56,6 +56,14 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     await p.fill('#inp', 'hello'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
     check((await p.textContent('#msgs')).includes('Smoke test reply'), 'Chat send + reply works');
     check((await p.locator('#schedPanel .sched').count()) === 1 && (await p.textContent('#schedPanel')).includes('09:00 10:00'), 'Scheduled panel: one compact line per bot');
+    // v2.0 memory
+    await p.fill('#inp', 'yaadtest'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
+    const mt = await p.textContent('#msgs');
+    check(mt.includes('🧠 Saved to') && mt.includes('shared memory (all bots): Saurabh') && !mt.includes('MEMORY+'), 'Memory: yaad rakho saves (own + shared)');
+    await p.fill('#inp', 'memcheck'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
+    check((await p.textContent('#msgs')).includes('memory seen yes'), 'Memory: next run gets the memory');
+    await p.fill('#inp', 'failtest'); await p.click('#sendBtn'); await p.waitForTimeout(1500); await p.evaluate(() => loadChat()); await p.waitForTimeout(500);
+    check((await p.locator('#msgs .redo').count()) >= 1, 'Failed run shows ↻ Dobara chalao');
     await p.fill('#inp', 'sessiontest'); await p.click('#sendBtn'); await p.waitForTimeout(2000);
     check((await p.textContent('#msgs')).includes('Smoke test reply:') && (await p.textContent('#msgs')).includes('sessiontest') && !(await p.textContent('#msgs')).includes('No conversation found'), 'Lost session: fresh session + retry works');
     await p.fill('#inp', 'failtest'); await p.click('#sendBtn'); await p.waitForTimeout(1500); await p.evaluate(() => loadChat()); await p.waitForTimeout(500);
@@ -89,6 +97,7 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check(ids[0] === 'mr-c' && ids[1] === 'linkedin-desk', 'Order: Mr. C first, moved bot goes up');
     check(await p.locator('#agentList button.mv').count() >= 2, 'Settings: ▲ ▼ buttons show');
     check((await p.textContent('#groupList')).includes('Software Bots'), 'Settings: groups list loads');
+    await p.waitForTimeout(400); check((await p.textContent('#memList')).includes('Shared (all bots)') && (await p.textContent('#memList')).includes('points'), 'Settings: memory list loads');
     check((await p.textContent('#usageBox')).includes('₹0'), 'Settings: usage loads');
     await p.click('#tabSched'); await p.waitForTimeout(300); check(await p.isVisible('#sSave'), 'Schedules tab opens');
   } catch (e) { check(false, 'Unexpected: ' + e.message); }

@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.9 rev E';
+const VERSION = 'v2.0 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -114,6 +114,9 @@ function runClaude(agent, message, opts, onEvent) {
     chat.sessionId = null; chat.sessionRuns = 0; saveChat(agent, chat);
   }
   if (chat.sessionId) args.push('--resume', chat.sessionId);
+  // v2.0 permanent memory: shared + this bot's memory go into every run; bot saves points with "🧠 MEMORY+" lines
+  const memNote = memoryPrompt(agent) + ((chat.sessionId && (chat.sessionRuns || 0) === FRESH_AFTER - 1)
+    ? ' THIS CHAT SESSION ENDS AFTER THIS REPLY: at the very end of your reply add up to 5 lines "🧠 MEMORY+: <point>" with long-term facts, decisions or preferences from this conversation that are not already in your memory (skip if none).' : '');
   // v1.3 connectors per bot: switched-off connectors are not loaded for this bot
   const off = connectorsOff(agent); if (off.length) args.push('--disallowedTools', ...off);
   const allow = [...new Set([...(chat.allow || []), ...(getSettings().allowAll || []), ...(opts.allowOnce || [])])]; // allowAll = approved once for all bots
@@ -130,7 +133,7 @@ function runClaude(agent, message, opts, onEvent) {
       'Several bots needed: hand to each. Then reply in 1-3 short lines saying which bot got the work (its reply appears in that bot\'s chat). ' +
       'If no member fits or the request is unclear, ask Kapil briefly. Do not do a member\'s work yourself. If the group is empty, tell Kapil to add bots via Settings > My agents > Group.';
   }
-  args.push('--append-system-prompt', tone + ' Your name in the Toshi Bot app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.' + groupNote);
+  args.push('--append-system-prompt', tone + ' Your name in the Toshi Bot app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.' + groupNote + memNote);
   args.push('--', freshNote + message);
 
   // Tools Kapil approved with Haan for this run: the guard hook allows exactly these
@@ -158,7 +161,7 @@ function runClaude(agent, message, opts, onEvent) {
       if (ev.type === 'system' && ev.subtype === 'init' && Array.isArray(ev.tools)) learnConnectors(ev.tools);
       if (ev.type === 'assistant' && ev.message && Array.isArray(ev.message.content)) {
         for (const c of ev.message.content) {
-          if (c.type === 'text' && c.text.trim()) { finalText.push(c.text); onEvent({ t: 'text', v: c.text }); }
+          if (c.type === 'text' && c.text.trim()) { const v = saveMemoryLines(agent, c.text); if (v.trim()) { finalText.push(v); onEvent({ t: 'text', v }); } }
           if (c.type === 'tool_use') { onEvent({ t: 'tool', v: toolLabel(c.name) }); if (isSendCall(agent, c.name, c.input)) logSend(agent, c.name, c.input); }
         }
       }
@@ -238,6 +241,45 @@ function orderedAgents(list) {
   const ord = getSettings().order || []; const pos = id => { const i = ord.indexOf(id); return i < 0 ? 1e6 : i; };
   const rest = list.filter(a => a.id !== 'mr-c').map((a, k) => ({ a, k })).sort((x, y) => pos(x.a.id) - pos(y.a.id) || x.k - y.k).map(x => x.a);
   return [...list.filter(a => a.id === 'mr-c'), ...rest.filter(a => a.pinned), ...rest.filter(a => !a.pinned)];
+}
+
+// ---------- v2.0 permanent memory (iCloud/ToshiAgents/memory/<bot>.md + shared.md) ----------
+const memDir = () => path.join(STORE_DIR(), 'memory'), MEM_LIMIT = 12 * 1024; // function: STORE is defined further down
+const memFile = id => path.join(memDir(), (id === 'shared' ? 'shared' : String(id).replace(/[^a-z0-9-]/gi, '')) + '.md');
+const readMem = id => { try { return fs.readFileSync(memFile(id), 'utf8'); } catch { return ''; } };
+function backupMemoryDaily() {
+  const day = nowIST().date, dir = path.join(STORE, 'backups', 'memory');
+  if (!fs.existsSync(memDir()) || fs.existsSync(path.join(dir, day))) return;
+  try {
+    fs.mkdirSync(path.join(dir, day), { recursive: true });
+    for (const f of fs.readdirSync(memDir())) fs.copyFileSync(path.join(memDir(), f), path.join(dir, day, f));
+    const days = fs.readdirSync(dir).sort(); days.slice(0, Math.max(0, days.length - 30)).forEach(d => fs.rmSync(path.join(dir, d), { recursive: true, force: true }));
+  } catch {}
+}
+function writeMem(id, text) {
+  backupMemoryDaily(); fs.mkdirSync(memDir(), { recursive: true });
+  const f = memFile(id); fs.writeFileSync(f + '.tmp', text); fs.renameSync(f + '.tmp', f); memWarn(id);
+}
+function memWarn(id) { // phone alert once a day per memory when 80% or more is used
+  const size = Buffer.byteLength(readMem(id)); if (size < MEM_LIMIT * 0.8) return;
+  const st = getSettings(); st.memWarned = st.memWarned || {}; const day = nowIST().date; if (st.memWarned[id] === day) return;
+  st.memWarned[id] = day; writeJSON(SETTINGS_FILE, st);
+  notify('Toshi Bot: ' + (id === 'shared' ? 'Shared' : agentName(id)) + ' memory ' + Math.round(size * 100 / MEM_LIMIT) + '% full', 'Clean up in Settings > Memory.');
+}
+function memoryPrompt(agent) {
+  const sh = readMem('shared').trim(), own = readMem(agent).trim();
+  return ' LONG-TERM MEMORY (from Kapil and earlier chats; use it):\n[Shared, all bots]\n' + (sh || '(empty)') + '\n[Only you]\n' + (own || '(empty)') +
+    '\nWhen Kapil says "yaad rakho", "remember" or similar, save it: put a line "🧠 MEMORY+: <short point>" in your reply (for this bot), or "🧠 MEMORY+ shared: <short point>" when he says all bots / sab bots. One line per point, short, no secrets/passwords/OTPs. The app saves these lines and shows "🧠 Saved".';
+}
+function saveMemoryLines(agent, text) {
+  return String(text).replace(/^[ \t>*-]*(?:🧠\s*)?MEMORY\+\s*(shared)?\s*:\s*(.+)$/gmi, (m, sh, point) => {
+    const id = sh ? 'shared' : agent, cur = readMem(id), line = '- ' + point.trim().slice(0, 400) + '  (' + nowIST().date + ')\n';
+    const where = sh ? 'shared memory (all bots)' : agentName(agent) + ' memory';
+    if (Buffer.byteLength(cur) + Buffer.byteLength(line) > MEM_LIMIT) { memWarn(id); return '⛔ Memory full, not saved (' + where + '): ' + point.trim() + ' — clean up in Settings > Memory.'; }
+    if (cur.includes(point.trim())) return '🧠 Already in ' + where + ': ' + point.trim();
+    writeMem(id, cur + (cur && !cur.endsWith('\n') ? '\n' : '') + line);
+    return '🧠 Saved to ' + where + ': ' + point.trim();
+  });
 }
 
 // ---------- v1.6 message queue: type while a bot works; queued messages run one by one ----------
@@ -789,6 +831,20 @@ const server = http.createServer(async (req, res) => {
           photo: ['png', 'jpg', 'jpeg', 'webp'].some(e => fs.existsSync(path.join(adir, a.id + '.' + e))) }));
         return json(res, 200, orderedAgents(list)); }
     if (req.method === 'GET' && url.pathname === '/api/groups') return json(res, 200, getGroups().map(g => ({ ...g, busy: running.has(g.id), unread: !!loadChat(g.id).unread })));
+    if (url.pathname === '/api/memory') { // v2.0
+      if (req.method === 'GET') {
+        const one = url.searchParams.get('agent');
+        if (one) { if (one !== 'shared' && !validAgent(one)) return json(res, 404, { error: 'Unknown agent' }); return json(res, 200, { text: readMem(one), limit: MEM_LIMIT }); }
+        const ids = ['shared', ...listAgents().map(a => a.id), ...getGroups().map(g => g.id)];
+        return json(res, 200, ids.map(id => { const t = readMem(id); let up = ''; try { up = fs.statSync(memFile(id)).mtime.toISOString(); } catch {}
+          return { id, name: id === 'shared' ? '🌐 Shared (all bots)' : agentName(id), size: Buffer.byteLength(t), limit: MEM_LIMIT, points: (t.match(/^- /gm) || []).length, updated: up }; }));
+      }
+      if (req.method === 'POST') {
+        const b = await readBody(req); const id = String(b.agent || '');
+        if (id !== 'shared' && !validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
+        writeMem(id, String(b.text || '')); return json(res, 200, { ok: true, size: Buffer.byteLength(readMem(id)) });
+      }
+    }
     if (req.method === 'GET' && url.pathname === '/api/status') {
       return json(res, 200, {
         app: VERSION, claude: claudeVersion, host: os.hostname(), uptime: os.uptime(),
