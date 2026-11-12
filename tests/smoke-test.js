@@ -56,6 +56,8 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     await p.fill('#inp', 'hello'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
     check((await p.textContent('#msgs')).includes('Smoke test reply'), 'Chat send + reply works');
     check((await p.locator('#schedPanel .sched').count()) === 1 && (await p.textContent('#schedPanel')).includes('09:00 10:00'), 'Scheduled panel: one compact line per bot');
+    await p.fill('#inp', 'sessiontest'); await p.click('#sendBtn'); await p.waitForTimeout(2000);
+    check((await p.textContent('#msgs')).includes('Smoke test reply:') && (await p.textContent('#msgs')).includes('sessiontest') && !(await p.textContent('#msgs')).includes('No conversation found'), 'Lost session: fresh session + retry works');
     await p.fill('#inp', 'failtest'); await p.click('#sendBtn'); await p.waitForTimeout(1500); await p.evaluate(() => loadChat()); await p.waitForTimeout(500);
     check((await p.textContent('#msgs')).includes('Could not run (code 1). Reason: Claude usage limit reached'), 'Failed run leaves a visible reason in chat');
     // v1.9 rev B: long scheduled message shows short

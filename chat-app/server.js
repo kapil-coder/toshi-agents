@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.9 rev D';
+const VERSION = 'v1.9 rev E';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -108,7 +108,7 @@ function runClaude(agent, message, opts, onEvent) {
   if (['opus', 'sonnet', 'haiku'].includes(model)) args.push('--model', model); // per-bot model (v0.9 rev D)
   // v1.3 auto-fresh: after 15 runs in one session, start a new session carrying only the last few messages (saves tokens)
   let freshNote = '';
-  if (chat.sessionId && (chat.sessionRuns || 0) >= FRESH_AFTER) {
+  if ((chat.sessionId && (chat.sessionRuns || 0) >= FRESH_AFTER) || opts.freshContext) {
     const recent = chat.messages.slice(-7, -1).map(m => (m.who === 'me' ? 'Kapil: ' : 'You: ') + String(m.text).slice(0, 600)).join('\n');
     freshNote = 'Context (new session to save tokens; recent messages from this chat):\n' + recent + '\n\nNew message:\n';
     chat.sessionId = null; chat.sessionRuns = 0; saveChat(agent, chat);
@@ -145,7 +145,7 @@ function runClaude(agent, message, opts, onEvent) {
     env.TOSHI_BROWSER_OUTPUT = path.join(os.homedir(), '.toshi-agents', 'browser-output', agent);
   }
   if (fs.existsSync(ICLOUD)) fs.mkdirSync(path.join(ICLOUD, agent === 'mr-c' || isGroup(agent) ? 'shared' : agent, 'work'), { recursive: true });
-  const child = spawn('claude', args, { cwd: PROJECT, env });
+  const child = spawn('claude', args, { cwd: PROJECT, env, stdio: ['ignore', 'pipe', 'pipe'] }); // v1.9 rev E: no stdin (saves a 3 s wait per run)
   running.set(agent, child);
   let buf = '', finalText = [], sessionId = chat.sessionId, denials = [], errText = '';
   child.stdout.on('data', d => {
@@ -173,6 +173,12 @@ function runClaude(agent, message, opts, onEvent) {
   child.on('error', e => { errText = 'Could not start Claude Code: ' + e.message; });
   child.on('close', code => {
     running.delete(agent);
+    // v1.9 rev E: the saved session is gone (Claude cannot find it) -> start a fresh session with recent context and retry once
+    if (code !== 0 && !finalText.length && /No conversation found with session ID/i.test(errText) && !opts.freshRetry) {
+      const cc = loadChat(agent); cc.sessionId = null; cc.sessionRuns = 0; saveChat(agent, cc);
+      runClaude(agent, message, { ...opts, freshRetry: true, freshContext: true }, onEvent);
+      return;
+    }
     const c = loadChat(agent);
     if (c.sessionId !== sessionId) c.sessionRuns = 0;
     c.sessionId = sessionId; c.sessionRuns = (c.sessionRuns || 0) + 1;
@@ -806,8 +812,8 @@ const server = http.createServer(async (req, res) => {
       const text = String(b.message || '').trim().slice(0, 8000);
       if (!text) return json(res, 400, { error: 'Empty message' });
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-cache' });
-      const child = startRun(b.agent, text, { tone: b.tone, allowOnce: b.allowOnce || [], always: !!b.always }, ev => res.write(JSON.stringify(ev) + '\n'));
-      child.on('close', () => setTimeout(() => res.end(), 50));
+      // v1.9 rev E: end the stream on 'done' (a retry can follow the first process)
+      startRun(b.agent, text, { tone: b.tone, allowOnce: b.allowOnce || [], always: !!b.always }, ev => { if (res.writableEnded) return; res.write(JSON.stringify(ev) + '\n'); if (ev.t === 'done') setTimeout(() => res.end(), 50); });
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/stop') {

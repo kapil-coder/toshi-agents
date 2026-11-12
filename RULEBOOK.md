@@ -18,7 +18,7 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
 | Guard hook | v0.5 rev A |
-| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings, update safety, ToshiCrm connector + key box + key check, bot icons + photos, lively icons, message queue + stop button, bot search + pin, mic EN default, bot groups, Zoho Books drafts, bot order, repo lock, safe update, short scheduled messages, compact schedule panel, visible run errors) | v1.9 rev D |
+| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings, update safety, ToshiCrm connector + key box + key check, bot icons + photos, lively icons, message queue + stop button, bot search + pin, mic EN default, bot groups, Zoho Books drafts, bot order, repo lock, safe update, short scheduled messages, compact schedule panel, visible run errors, lost-session auto-retry) | v1.9 rev E |
 
 ## 2. Rules for every agent
 
@@ -126,6 +126,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v0.6 rev C+++ | 12-11-2026 | App v1.9 rev E: if Claude cannot find a bot's saved session, the app starts a fresh session with the last messages and retries once (fixed Whatsapp Bot); no 3 s stdin wait per run. |
 | v0.6 rev C++ | 12-11-2026 | App v1.9 rev D: a bot run that ends with no reply now leaves a ⚠️ note with the reason in the chat (and a phone alert for scheduled/handoff runs). |
 | v0.6 rev C+ | 11-11-2026 | App v1.9 rev C: Scheduled panel shows one line per bot (all times together, tap to open); Safety panel text updated (Zoho Books drafts). |
 | v0.6 rev C | 11-11-2026 | App v1.9 rev B: smoke test can never touch real iCloud data (fix after a bot ran it on the Mac and test data overwrote settings/chats); scripts/restore-settings.js; long scheduled messages show short. Bots never run tests. |
