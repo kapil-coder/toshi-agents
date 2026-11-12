@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v1.9 rev C';
+const VERSION = 'v1.9 rev D';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -177,6 +177,12 @@ function runClaude(agent, message, opts, onEvent) {
     if (c.sessionId !== sessionId) c.sessionRuns = 0;
     c.sessionId = sessionId; c.sessionRuns = (c.sessionRuns || 0) + 1;
     if (finalText.length) c.messages.push({ who: 'bot', text: finalText.join('\n\n'), at: stamp() });
+    // v1.9 rev D: a run that ends with no reply leaves a visible note (scheduled/handoff errors were invisible before)
+    else if (!denials.length) {
+      const why = (errText || '').trim().split('\n').filter(Boolean).slice(-3).join(' ').slice(-400);
+      c.messages.push({ who: 'bot', text: '⚠️ ' + (code === 0 ? 'Finished without a reply.' : 'Could not run (code ' + code + ').') + (why ? ' Reason: ' + why : ''), at: stamp() });
+      if (opts.kind && opts.kind !== 'chat') notify('Toshi Bot: ' + agentName(agent) + ' could not run', 'Open the app to see the reason.');
+    }
     if (denials.length) c.pending = denials; else delete c.pending;
     saveChat(agent, c);
     if (denials.length) onEvent({ t: 'approve', v: denials });
