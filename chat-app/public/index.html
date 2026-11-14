@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.1 rev A (14-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.2 rev A (14-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,11 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.icw{position:relative;flex:none;display:block}
+.icw .bbadge{position:absolute;right:-5px;bottom:-5px;width:19px;height:19px;border-radius:50%;background:#6b4fb3;border:2px solid var(--surface-2);display:grid;place-items:center;font-size:10px;line-height:1;z-index:1}
+.agent small.inb{color:#6b4fb3}
+.agent .rt{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px;font-size:10.5px;color:var(--muted);flex:none}
+.agent .udot{width:9px;height:9px;border-radius:50%;background:#3b82f6}
 .m .acts{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;white-space:normal}
 .m .acts button{border:1px solid var(--line);background:var(--surface);color:inherit;border-radius:7px;padding:2px 8px;font-size:12px;cursor:pointer;opacity:.75}
 .m .acts button:hover{opacity:1}.m .acts button.on{opacity:1;background:rgba(47,158,127,.15);border-color:var(--accent)}
@@ -211,6 +216,7 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
   .agent{width:auto;flex:none}
   .asearch{flex:none;width:130px;margin:0 4px 0 0}
   .agent.sub{margin-left:0;width:auto;border-left:0;background:rgba(36,66,122,.07);border-radius:8px}
+  .side .rt span:first-child{display:none}
   .titlebar .dot{display:none}
   .m{max-width:92%}
 }
@@ -540,9 +546,9 @@ async function loadAgents() {
     }
     const working = busyAgents.has(a.id) || a.busy;
     const b = el('button', 'agent' + (a.id === cur ? ' on' : '') + (working ? ' work' : '') + (inGroup(a) ? ' sub' : '')); b.dataset.id = a.id; if (inGroup(a)) b.dataset.gid = a.group;
-    const av = botIcon(a);
+    const av = el('span', 'icw'); av.append(botIcon(a));
     const t = el('span'); t.append(el('b', null, (a.pinned ? '⭐ ' : '') + a.name), el('small', null, a.description));
-    b.append(av, t, a.unread && a.id !== cur ? el('span', 'bell', '🔔') : a.paused && !busyAgents.has(a.id) ? el('span', 'pill warn', 'Paused') : el('span', 'live' + (busyAgents.has(a.id) || a.busy ? ' busy' : '')));
+    b.append(av, t, el('span', 'live')); sideState(b, a);
     b.onclick = () => selectChat(a.id);
     side.append(b);
   }
@@ -552,6 +558,24 @@ async function loadAgents() {
   const au = el('button', 'agent'); const av2 = el('span', 'av', '⚙️'); av2.style.cssText = 'background:transparent;border:1px dashed var(--line)';
   au.append(av2, el('b', null, 'Settings')); au.onclick = () => openAuto('set'); side.append(au);
   filterAgents(); showHeader(); loadChat();
+}
+// ---------- v2.2 sidebar state: 🤖 badge, "📨 From X" preview, time + blue dot ----------
+function sideState(b, a) {
+  const working = busyAgents.has(a.id) || a.busy, unread = a.unread && a.id !== cur;
+  b.classList.toggle('work', !!working);
+  const w = b.querySelector('.icw'), old = w && w.querySelector('.bbadge'); if (old) old.remove();
+  if (w && unread && a.inKind === 'bot') { const bd = el('span', 'bbadge', '🤖'); bd.title = 'Work from ' + a.inFrom; w.append(bd); }
+  const sm = b.children[1] && b.children[1].querySelector('small');
+  if (sm) {
+    const pv = unread && a.inKind === 'bot' ? '📨 From ' + a.inFrom + (a.inText ? ': ' + a.inText : '') : unread && a.inKind === 'sched' ? '⏰ ' + a.inText + ' done' : '';
+    sm.dataset.pv = pv; sm.classList.toggle('inb', !!pv); if (!agentQ) sm.textContent = pv || a.description || '';
+  }
+  let right;
+  if (working) right = el('span', 'live busy');
+  else if (unread) { right = el('span', 'rt'); right.append(el('span', null, a.inAt || ''), el('span', 'udot')); }
+  else if (a.paused) right = el('span', 'pill warn', 'Paused');
+  else right = el('span', 'live');
+  b.replaceChild(right, b.lastChild);
 }
 // ---------- v1.7 agent search + pin ----------
 let agentQ = '';
@@ -580,7 +604,7 @@ function filterAgents() {
     const hit = !agentQ || (a.name + ' ' + (a.description || '') + ' ' + a.id).toLowerCase().includes(agentQ);
     const closed = b.dataset.gid && !openGroups.has(b.dataset.gid) && !agentQ;
     b.hidden = !hit || closed; if (hit) shown++;
-    markText(b.children[1].querySelector('b'), (a.pinned ? '⭐ ' : '') + a.name, agentQ); markText(b.children[1].querySelector('small'), a.description || '', agentQ);
+    markText(b.children[1].querySelector('b'), (a.pinned ? '⭐ ' : '') + a.name, agentQ); { const sm = b.children[1].querySelector('small'); if (agentQ) markText(sm, a.description || '', agentQ); else sm.textContent = sm.dataset.pv || a.description || ''; }
   }
   for (const h of document.querySelectorAll('#side .agent[data-grp]')) {
     const g = groups.find(x => x.id === h.dataset.grp); if (!g) continue;
@@ -728,13 +752,7 @@ async function loadAgentsQuiet() {
   // refresh sidebar dots without reloading the open chat
   const list = await (await fetch('/api/agents')).json();
   document.querySelectorAll('#side .agent[data-id]').forEach(b => {
-    const a = list.find(x => x.id === b.dataset.id); if (!a) return; const dot = b.lastChild;
-    const working = busyAgents.has(a.id) || a.busy;
-    b.classList.toggle('work', !!working);
-    if (a.unread && a.id !== cur && !working) { b.replaceChild(el('span', 'bell', '🔔'), dot); }
-    else if (working) { const n = el('span', 'live busy'); b.replaceChild(n, dot); }
-    else if (a.paused) { b.replaceChild(el('span', 'pill warn', 'Paused'), dot); }
-    else { b.replaceChild(el('span', 'live'), dot); }
+    const a = list.find(x => x.id === b.dataset.id); if (!a) return; sideState(b, a);
   });
 }
 async function loadChatMeta() { const d = await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json(); $('allowList').textContent = d.allow.length ? d.allow.map(label).join(', ') : 'None yet'; }

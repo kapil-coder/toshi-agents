@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v2.1 rev A';
+const VERSION = 'v2.2 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -282,6 +282,19 @@ function saveMemoryLines(agent, text) {
   });
 }
 
+// ---------- v2.2 sidebar preview: who sent the last task (another bot / schedule) ----------
+function inboxInfo(id) {
+  const c = loadChat(id), last = [...c.messages].reverse().find(m => m.who === 'me'); if (!last) return {};
+  const t = String(last.text), at = String(last.at || '').slice(-5), first = t.split('\n')[0];
+  if (/^📨/.test(t)) {
+    const from = first.replace(/^📨\s*From\s*/, '').trim();
+    const body = t.split('\n\n').slice(1).join(' ').replace(/^Kapil's request \(via [^)]*\):\s*/i, '').replace(/\s+/g, ' ').trim();
+    return { inKind: 'bot', inFrom: from, inText: body.slice(0, 80), inAt: at };
+  }
+  if (/^⏰/.test(t)) return { inKind: 'sched', inFrom: '', inText: first.replace(/^⏰\s*/, ''), inAt: at };
+  return { inAt: at };
+}
+
 // ---------- v1.6 message queue: type while a bot works; queued messages run one by one ----------
 // Paused while a Haan card is waiting (answering the card continues the queue).
 function drainQueue(agent) {
@@ -418,7 +431,7 @@ function startRun(agent, text, opts, onEvent, meta = {}) {
   if (opts.always && Array.isArray(opts.allowOnce)) {
     const st = getSettings(); st.allowAll = [...new Set([...(st.allowAll || []), ...opts.allowOnce.filter(t => !SEND_RE.test(t))])]; writeJSON(SETTINGS_FILE, st);
   }
-  c.messages.push({ who: 'me', text: meta.label ? meta.label + '\n' + text : text, at: stamp() }); delete c.pending; saveChat(agent, c);
+  c.messages.push({ who: 'me', text: meta.label ? meta.label + '\n' + text : text, at: stamp() }); delete c.pending; if (meta.handoff) c.unread = true; saveChat(agent, c);
   const what = meta.handoff ? 'Task from ' + meta.from : 'Scheduled task ' + meta.time;
   opts.kind = meta.handoff ? 'handoff' : meta.scheduled ? 'schedule' : 'chat';
   return runClaude(agent, text, opts, ev => {
@@ -827,7 +840,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && url.pathname === '/api/agents') { const icons = getSettings().icons || {}; const adir = path.join(STORE, 'avatars');
         const pins = getSettings().pins || []; // v1.7: pinned bots first
-        const list = listAgents().map(a => ({ ...a, group: groupOf(a.id), busy: running.has(a.id), unread: !!loadChat(a.id).unread, icon: icons[a.id] || '', pinned: pins.includes(a.id),
+        const list = listAgents().map(a => ({ ...a, ...inboxInfo(a.id), group: groupOf(a.id), busy: running.has(a.id), unread: !!loadChat(a.id).unread, icon: icons[a.id] || '', pinned: pins.includes(a.id),
           photo: ['png', 'jpg', 'jpeg', 'webp'].some(e => fs.existsSync(path.join(adir, a.id + '.' + e))) }));
         return json(res, 200, orderedAgents(list)); }
     if (req.method === 'GET' && url.pathname === '/api/groups') return json(res, 200, getGroups().map(g => ({ ...g, busy: running.has(g.id), unread: !!loadChat(g.id).unread })));

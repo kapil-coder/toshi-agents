@@ -80,6 +80,14 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check((await p.textContent('#msgs')).includes('Smoke test reply:') && (await p.textContent('#msgs')).includes('sessiontest') && !(await p.textContent('#msgs')).includes('No conversation found'), 'Lost session: fresh session + retry works');
     await p.fill('#inp', 'failtest'); await p.click('#sendBtn'); await p.waitForTimeout(1500); await p.evaluate(() => loadChat()); await p.waitForTimeout(500);
     check((await p.textContent('#msgs')).includes('Could not run (code 1). Reason: Claude usage limit reached'), 'Failed run leaves a visible reason in chat');
+    // v2.2 bot-to-bot badge (Mr. C hands work to LinkedIn Desk while Kapil is in Mr. C)
+    await p.click('#side .agent[data-id="mr-c"]'); await p.waitForTimeout(500);
+    await p.evaluate(() => fetch('/api/handoff', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ from: 'mr-c', to: 'linkedin-desk', msg: 'Kapil\'s request (via Mr. C): check Haldiram lead', hop: 0 }) }));
+    await p.waitForTimeout(2500); await p.evaluate(() => loadAgentsQuiet()); await p.waitForTimeout(600);
+    const li = p.locator('#side .agent[data-id="linkedin-desk"]');
+    check((await li.locator('.bbadge').count()) === 1 && (await li.textContent()).includes('📨 From Mr. C: check Haldiram lead') && (await li.locator('.udot').count()) === 1, 'Handoff shows 🤖 badge + "From" preview + blue dot');
+    await p.evaluate(() => selectChat('linkedin-desk')); await p.waitForTimeout(800); await p.evaluate(() => selectChat('mr-c')); await p.waitForTimeout(800);
+    check((await p.locator('#side .agent[data-id="linkedin-desk"] .bbadge').count()) === 0, 'Badge goes after opening the bot');
     // v1.9 rev B: long scheduled message shows short
     await p.evaluate(() => addMsg('me', '⏰ Scheduled 19:00 IST\n' + 'LinkedIn evening desk steps '.repeat(20), 'x'));
     const lm = p.locator('#msgs .m.me').last();
