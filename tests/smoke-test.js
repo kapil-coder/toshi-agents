@@ -64,6 +64,18 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check((await p.textContent('#msgs')).includes('memory seen yes'), 'Memory: next run gets the memory');
     await p.fill('#inp', 'failtest'); await p.click('#sendBtn'); await p.waitForTimeout(1500); await p.evaluate(() => loadChat()); await p.waitForTimeout(500);
     check((await p.locator('#msgs .redo').count()) >= 1, 'Failed run shows ↻ Dobara chalao');
+    // v2.1 actions
+    await p.fill('#inp', 'codetest'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
+    const lastBot = p.locator('#msgs .m.bot').last();
+    check((await lastBot.locator('pre.cb .cbcopy').count()) === 1 && (await lastBot.locator('.acts button').count()) >= 4, 'Reply has 📋 Copy (box + whole), 👍 👎, Retry');
+    await p.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {});
+    await lastBot.locator('pre.cb .cbcopy').click(); await p.waitForTimeout(300);
+    const clip = await p.evaluate(() => navigator.clipboard.readText().catch(() => ''));
+    check(clip === 'POINT SIX TEXT', 'Box copy gives only the box text');
+    await lastBot.locator('.acts button', { hasText: '👎' }).click(); await lastBot.locator('.fb input[type=text]').fill('GST alag nahi dikhaya'); await lastBot.locator('.fb button').click(); await p.waitForTimeout(600);
+    check((await lastBot.textContent()).includes('Lesson saved to memory'), '👎 with reason saves a lesson to memory');
+    await p.evaluate(() => loadChat()); await p.waitForTimeout(500);
+    check(await p.locator('#msgs .m.bot').last().locator('.acts button.on').count() === 1, 'Vote stays after reload');
     await p.fill('#inp', 'sessiontest'); await p.click('#sendBtn'); await p.waitForTimeout(2000);
     check((await p.textContent('#msgs')).includes('Smoke test reply:') && (await p.textContent('#msgs')).includes('sessiontest') && !(await p.textContent('#msgs')).includes('No conversation found'), 'Lost session: fresh session + retry works');
     await p.fill('#inp', 'failtest'); await p.click('#sendBtn'); await p.waitForTimeout(1500); await p.evaluate(() => loadChat()); await p.waitForTimeout(500);

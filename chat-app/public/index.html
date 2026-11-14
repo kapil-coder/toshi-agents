@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.0 rev A (12-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.1 rev A (14-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,13 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.m .acts{display:flex;gap:4px;margin-top:8px;flex-wrap:wrap;white-space:normal}
+.m .acts button{border:1px solid var(--line);background:var(--surface);color:inherit;border-radius:7px;padding:2px 8px;font-size:12px;cursor:pointer;opacity:.75}
+.m .acts button:hover{opacity:1}.m .acts button.on{opacity:1;background:rgba(47,158,127,.15);border-color:var(--accent)}
+.m pre.cb{position:relative;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px 10px 10px;margin:6px 0;white-space:pre-wrap;font:12px/1.45 var(--f-mono,monospace)}
+.m pre.cb .cbcopy{position:absolute;top:6px;right:6px;border:1px solid var(--line);background:var(--surface);color:inherit;border-radius:6px;font-size:11px;padding:2px 7px;cursor:pointer}
+.m .fb{margin-top:8px;padding:8px;border:1px dashed var(--line);border-radius:8px;font-size:12.5px;white-space:normal;display:grid;gap:6px}
+.m .fb input[type=text]{border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--surface);color:inherit}
 .memrow{padding:8px 0;border-top:1px solid var(--line)}.memrow .top{display:flex;justify-content:space-between;align-items:center;gap:8px}
 .membar{height:7px;border-radius:4px;background:var(--line);margin:6px 0 2px;overflow:hidden}.membar i{display:block;height:100%}
 .memrow textarea{width:100%;box-sizing:border-box;min-height:140px;margin-top:6px;border:1px solid var(--line);border-radius:8px;padding:8px;font:12px/1.4 var(--f-mono,monospace);background:var(--surface-2);color:inherit}
@@ -616,7 +623,7 @@ async function loadChat(pre) {
     const e = el('div', 'empty'); e.append(el('b', null, 'Namaste Kapil ji'), el('span', null, 'Type, speak 🎤, paste or attach 📎. Bots send when you ask (auto-send); deletes still wait for your Haan.'));
     m.append(e);
   }
-  for (const x of d.messages) addMsg(x.who, x.text, x.at);
+  d.messages.forEach((x, i) => addMsg(x.who, x.text, x.at, { idx: i, vote: x.vote }));
   if (d.pending && d.pending.length) addApproval(d.pending);
   $('allowList').textContent = d.allow.length ? d.allow.map(label).join(', ') : 'None yet';
   if (isBusy()) m.append(el('div', 'tool', serverBusy ? 'Working (queued task or another device)… updates here automatically.' : 'Still working… the reply appears here when done. You can use other agents meanwhile.'));
@@ -625,10 +632,13 @@ async function loadChat(pre) {
 function label(t) { const m = String(t).match(/^mcp__(.+?)__(.+)$/); return m ? m[1].replace(/^claude_ai_/, '').replace(/_/g, ' ') + ': ' + m[2].replace(/_/g, ' ') : t; }
 function md(text) {
   const esc = String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  return esc.replace(/^#{1,4}\s+(.*)$/gm, '<b>$1</b>').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  // v2.1: ``` blocks become boxes with their own copy button (added in addMsg)
+  const parts = esc.split(/```[^\n]*\n?/);
+  return parts.map((p, i) => i % 2 ? '<pre class="cb">' + p.replace(/\n$/, '') + '</pre>'
+    : p.replace(/^#{1,4}\s+(.*)$/gm, '<b>$1</b>').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`\n]+)`/g, '<code>$1</code>')).join('');
 }
 function bubble(who, text) { const d = el('div', 'm ' + who); d.innerHTML = md(text); return d; }
-function addMsg(who, text, at) {
+function addMsg(who, text, at, meta = {}) {
   const empty = $('msgs').querySelector('.empty'); if (empty) empty.remove();
   // v1.9 rev B: long scheduled / handoff instructions show short (first line + a few words); tap to see all
   const long = who === 'me' && /^(⏰|📨)/.test(text) && text.length > 160;
@@ -640,7 +650,37 @@ function addMsg(who, text, at) {
     if (prev && prev.dataset.full) { const rb = el('button', 'redo', '↻ Dobara chalao'); rb.type = 'button'; rb.onclick = () => { rb.disabled = true; let t = prev.dataset.full; if (/^(⏰|📨)/.test(t)) t = t.split('\n').slice(1).join('\n'); send(t.trim()); }; d.append(rb); }
   }
   if (who === 'me') d.dataset.full = text;
+  d.querySelectorAll('pre.cb').forEach(pre => { const raw = pre.textContent; const b = el('button', 'cbcopy', '📋 Copy'); b.type = 'button'; b.onclick = () => copyText(raw, b); pre.append(b); });
+  if (who === 'bot' && meta.idx !== undefined) d.append(msgActions(d, text, meta));
   if (at) d.append(el('span', 'at', at)); $('msgs').append(d); scroll(); return d;
+}
+// ---------- v2.1 message actions: copy, share, 👍 👎, retry ----------
+const plain = t => String(t).replace(/```[^\n]*\n?/g, '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/^#{1,4}\s+/gm, '').replace(/`([^`\n]+)`/g, '$1').trim();
+function copyText(t, btn) {
+  const done = () => { if (btn) { const o = btn.textContent; btn.textContent = 'Copied ✓'; setTimeout(() => { btn.textContent = o; }, 1500); } };
+  const fallback = () => { const ta = el('textarea'); ta.value = t; ta.style.cssText = 'position:fixed;opacity:0'; document.body.append(ta); ta.select(); try { document.execCommand('copy'); } catch {} ta.remove(); done(); };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(t).then(done, fallback); else fallback();
+}
+function msgActions(d, text, meta) {
+  const row = el('div', 'acts'); const b = (ic, title, f) => { const k = el('button', null, ic); k.type = 'button'; k.title = title; k.onclick = f; row.append(k); return k; };
+  const cp = b('📋 Copy', 'Copy the whole reply', () => copyText(plain(text), cp));
+  if (navigator.share) b('↗ Share', 'Share (WhatsApp, Mail…)', () => navigator.share({ text: plain(text) }).catch(() => {}));
+  const agent = cur;
+  const vote = (v, reason, remember) => post('/api/feedback', { agent, idx: meta.idx, vote: v, reason: reason || '', remember: !!remember, text: text.slice(0, 300) });
+  const up = b('👍', 'Good answer', () => { up.classList.add('on'); dn.classList.remove('on'); vote('up').catch(() => {}); });
+  const dn = b('👎', 'Not good', () => {
+    up.classList.remove('on'); dn.classList.add('on');
+    if (d.querySelector('.fb')) return;
+    const fb = el('div', 'fb'); fb.append(el('div', null, 'Kya galat tha? (optional)'));
+    const inp = el('input'); inp.type = 'text'; inp.placeholder = 'e.g. GST alag nahi dikhaya';
+    const lb = el('label'); const ck = el('input'); ck.type = 'checkbox'; ck.checked = true; lb.append(ck, document.createTextNode(' Yaad rakho (lesson in bot memory)'));
+    const sv = el('button', 'btn', 'Save'); sv.type = 'button';
+    sv.onclick = () => vote('down', inp.value.trim(), ck.checked && inp.value.trim()).then(r => { fb.replaceChildren(el('span', 'note', r && r.saved ? '🧠 Lesson saved to memory ✓' : 'Feedback saved ✓')); }).catch(e => { fb.replaceChildren(el('span', 'err', e.message)); });
+    fb.append(inp, lb, sv); row.after(fb); inp.focus();
+  });
+  if (meta.vote === 'up') up.classList.add('on'); if (meta.vote === 'down') dn.classList.add('on');
+  b('↻ Retry', 'Ask the same again', () => { const all = [...$('msgs').querySelectorAll('.m.me')]; const prev = all.filter(m => m.compareDocumentPosition(d) & Node.DOCUMENT_POSITION_FOLLOWING).pop(); if (!prev) return; let t = prev.dataset.full; if (/^(⏰|📨)/.test(t)) t = t.split('\n').slice(1).join('\n'); send(t.trim()); });
+  return row;
 }
 function addApproval(items) {
   const box = el('div', 'ask'); box.append(el('b', null, 'Needs your OK'));

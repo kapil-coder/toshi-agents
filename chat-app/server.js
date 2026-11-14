@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v2.0 rev A';
+const VERSION = 'v2.1 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -831,6 +831,16 @@ const server = http.createServer(async (req, res) => {
           photo: ['png', 'jpg', 'jpeg', 'webp'].some(e => fs.existsSync(path.join(adir, a.id + '.' + e))) }));
         return json(res, 200, orderedAgents(list)); }
     if (req.method === 'GET' && url.pathname === '/api/groups') return json(res, 200, getGroups().map(g => ({ ...g, busy: running.has(g.id), unread: !!loadChat(g.id).unread })));
+    if (req.method === 'POST' && url.pathname === '/api/feedback') { // v2.1 👍 / 👎 (+ optional lesson into the bot's memory)
+      const b = await readBody(req); if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });
+      const vote = b.vote === 'down' ? 'down' : 'up', reason = String(b.reason || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300);
+      const c = loadChat(b.agent), m = c.messages[Number(b.idx)];
+      if (m && m.who === 'bot') { m.vote = vote; saveChat(b.agent, c); }
+      try { fs.appendFileSync(path.join(STORE, 'feedback.jsonl'), JSON.stringify({ t: stamp(), agent: b.agent, vote, reason, text: String(b.text || '').slice(0, 300) }) + '\n'); } catch {}
+      let saved = false;
+      if (vote === 'down' && b.remember && reason) saved = /^🧠 Saved/.test(saveMemoryLines(b.agent, '🧠 MEMORY+: Lesson from Kapil\'s 👎: ' + reason));
+      return json(res, 200, { ok: true, saved });
+    }
     if (url.pathname === '/api/memory') { // v2.0
       if (req.method === 'GET') {
         const one = url.searchParams.get('agent');
