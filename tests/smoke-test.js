@@ -18,7 +18,7 @@ const fixture = { ntfyTopic: 'toshi-smoke123', notify: true, autoSend: true, dai
 fs.writeFileSync(path.join(tmp, 'icloud', 'app-settings.json'), JSON.stringify(fixture));
 const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'toshi-bin-')); fs.copyFileSync(path.join(ROOT, 'tests', 'fake-claude.sh'), path.join(bin, 'claude')); fs.chmodSync(path.join(bin, 'claude'), 0o755);
 const PORT = 3990 + Math.floor(Math.random() * 9);
-const srv = spawn('node', ['chat-app/server.js'], { cwd: tmp, env: { ...process.env, PORT: String(PORT), PATH: bin + ':' + process.env.PATH, HOME: tmp } });
+const srv = spawn('node', ['chat-app/server.js'], { cwd: tmp, env: { ...process.env, PORT: String(PORT), PATH: bin + ':' + process.env.PATH, HOME: tmp, TOSHI_WATCH_MS: '2000' } });
 let srvErr = ''; srv.stderr.on('data', d => srvErr += d);
 const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  ✗ ') + what); if (!ok) fails.push(what); };
 (async () => {
@@ -88,6 +88,14 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check((await li.locator('.bbadge').count()) === 1 && (await li.textContent()).includes('📨 From Mr. C: check Haldiram lead') && (await li.locator('.udot').count()) === 1, 'Handoff shows 🤖 badge + "From" preview + blue dot');
     await p.evaluate(() => selectChat('linkedin-desk')); await p.waitForTimeout(800); await p.evaluate(() => selectChat('mr-c')); await p.waitForTimeout(800);
     check((await p.locator('#side .agent[data-id="linkedin-desk"] .bbadge').count()) === 0, 'Badge goes after opening the bot');
+    // v2.3 watch mode: 'nothing new' leaves no trace
+    const before = await p.evaluate(() => fetch('/api/chat?agent=investor-desk').then(r => r.json()).then(d => d.messages.length));
+    await p.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'watch', id: 'investor-desk', cfg: { on: true, every: 10, from: '00:00', to: '23:59', days: [0,1,2,3,4,5,6], gmail: true, summary: '' } }) }));
+    await p.waitForTimeout(6000);
+    const wst = await p.evaluate(() => fetch('/api/settings').then(r => r.json()).then(s => s.watch['investor-desk']));
+    const after = await p.evaluate(() => fetch('/api/chat?agent=investor-desk').then(r => r.json()).then(d => d.messages.length));
+    check(wst.lastRun > 0 && after === before, 'Watch mode ran; NO_NEW left no trace in chat');
+    await p.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'watch', id: 'investor-desk', cfg: { on: false } }) }));
     // v1.9 rev B: long scheduled message shows short
     await p.evaluate(() => addMsg('me', '⏰ Scheduled 19:00 IST\n' + 'LinkedIn evening desk steps '.repeat(20), 'x'));
     const lm = p.locator('#msgs .m.me').last();
@@ -116,6 +124,11 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     const ids = await p.evaluate(() => fetch('/api/agents').then(r => r.json()).then(l => l.map(a => a.id)));
     check(ids[0] === 'mr-c' && ids[1] === 'linkedin-desk', 'Order: Mr. C first, moved bot goes up');
     check(await p.locator('#agentList button.mv').count() >= 2, 'Settings: ▲ ▼ buttons show');
+    await p.locator('#agentList button', { hasText: '👁 Watch' }).first().click(); await p.waitForTimeout(300);
+    check(await p.locator('#agentList .watchbox').count() === 1, 'Settings: 👁 Watch panel opens');
+    await p.evaluate(() => openAdd()); await p.waitForTimeout(300);
+    check(await p.evaluate(() => [...document.querySelectorAll('#fTools input:checked')].map(i => i.parentElement.textContent).join('|').includes('Prabhu ToshiCrm')), 'Add agent: Prabhu ToshiCrm ticked by default');
+    await p.evaluate(() => { document.getElementById('overlay').hidden = true; });
     check((await p.textContent('#groupList')).includes('Software Bots'), 'Settings: groups list loads');
     await p.waitForTimeout(400); check((await p.textContent('#memList')).includes('Shared (all bots)') && (await p.textContent('#memList')).includes('points'), 'Settings: memory list loads');
     check((await p.textContent('#usageBox')).includes('₹0'), 'Settings: usage loads');

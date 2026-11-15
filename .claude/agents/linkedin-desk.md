@@ -51,7 +51,7 @@ Everything else goes out when Kapil asks (auto-send, 10-11-2026).
 ## Morning prospecting (`/prospecting-morning`, weekdays)
 
 1. Read Arjun's Daily Prospecting Report from Gmail. (Kavya's report is discontinued; don't look for it.)
-2. For each new qualified lead: check Zoho CRM (read-only) and Gmail. Skip anyone the team already engaged.
+2. For each new qualified lead: check Prabhu ToshiCrm (main CRM; Zoho CRM only as read-only backup) and Gmail. Skip anyone the team already engaged.
 3. Enrich at most one contact per company in Apollo.
 4. Draft a short cold intro with the catalogue link from the charter. CC rules from the charter.
 5. Send the intros when Kapil asks (auto-send, decision 10-11-2026); otherwise keep them as drafts for his review.

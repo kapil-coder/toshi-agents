@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.2 rev A (14-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.3 rev A (15-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,8 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.watchbox{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-top:8px;padding:8px;border:1px dashed var(--line);border-radius:8px;font-size:12.5px}
+.watchbox .note{flex-basis:100%}
 .icw{position:relative;flex:none;display:block}
 .icw .bbadge{position:absolute;right:-5px;bottom:-5px;width:19px;height:19px;border-radius:50%;background:#6b4fb3;border:2px solid var(--surface-2);display:grid;place-items:center;font-size:10px;line-height:1;z-index:1}
 .agent small.inb{color:#6b4fb3}
@@ -446,7 +448,7 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
 const PAGE_VERSION = '__APP_VERSION__'; // filled in by the server; page reloads itself if the app was updated
 const $ = id => document.getElementById(id);
 const COLORS = ['#24427a','#c46a12','#1f8a5b','#6b4fb3','#b8323f','#0a66c2','#8a6d1f','#2f7f86'];
-const TOOLS = ['Zoho CRM','Zoho Books','Gmail','Google Sheets','Google Drive','Calendar','Web search','Browser','Apollo','WhatsApp'];
+const TOOLS = ['Prabhu ToshiCrm','Zoho CRM (backup, read)','Zoho Books','Gmail','Google Sheets','Google Drive','Calendar','Web search','Browser','Apollo','WhatsApp'];
 const ASKS = ['Sending mail','Editing CRM','Payments','Sharing files','Any WhatsApp','Any LinkedIn message'];
 let agents = [], cur = 'mr-c', tone = 'pro';
 const busyAgents = new Set(); // agents working right now (several can run in parallel)
@@ -665,7 +667,7 @@ function bubble(who, text) { const d = el('div', 'm ' + who); d.innerHTML = md(t
 function addMsg(who, text, at, meta = {}) {
   const empty = $('msgs').querySelector('.empty'); if (empty) empty.remove();
   // v1.9 rev B: long scheduled / handoff instructions show short (first line + a few words); tap to see all
-  const long = who === 'me' && /^(⏰|📨)/.test(text) && text.length > 160;
+  const long = who === 'me' && /^(⏰|📨|👁)/.test(text) && text.length > 160;
   const shortText = long ? text.split('\n')[0] + '\n' + text.split('\n').slice(1).join(' ').slice(0, 90) + '…' : text;
   const d = bubble(who, shortText);
   if (long) { const more = el('button', 'more', '▸ Poora dekhein'); more.type = 'button'; more.onclick = () => { const open = more.textContent.startsWith('▸'); d.querySelector('.txt').innerHTML = md(open ? text : shortText); more.textContent = open ? '▾ Chhota karein' : '▸ Poora dekhein'; }; d.innerHTML = ''; const t = el('div', 'txt'); t.innerHTML = md(shortText); d.append(t, more); }
@@ -847,7 +849,7 @@ function picked(box) { return [...box.querySelectorAll('input:checked')].map(i =
 function openAdd() {
   const fg = $('fGroup'); fg.replaceChildren(new Option('No group (main list)', '')); for (const g of groups) fg.add(new Option('📂 ' + g.name, g.id));
   fg.value = groups.some(g => g.id === cur) ? cur : '';
-  opts($('fTools'), TOOLS, ['Gmail']); opts($('fAsk'), ASKS, ['Sending mail','Editing CRM','Payments']); $('smsg').textContent = ''; $('cmsg').textContent = ''; $('overlay').hidden = false; }
+  opts($('fTools'), TOOLS, ['Prabhu ToshiCrm', 'Gmail']); opts($('fAsk'), ASKS, ['Sending mail','Editing CRM','Payments']); $('smsg').textContent = ''; $('cmsg').textContent = ''; $('overlay').hidden = false; }
 $('closeAdd').onclick = () => { $('overlay').hidden = true; };
 $('tabImport').onclick = () => { $('tabImport').classList.add('on'); $('tabNew').classList.remove('on'); $('importBox').hidden = false; };
 $('tabNew').onclick = () => { $('tabNew').classList.add('on'); $('tabImport').classList.remove('on'); $('importBox').hidden = true; };
@@ -1009,6 +1011,8 @@ async function loadSched() {
     btns.append(run, tg, del); it.append(btns); box.append(it);
     if (s.enabled) { const k = s.agent; if (!perBot.has(k)) perBot.set(k, { nm, times: new Set() }); s.times.forEach(t => perBot.get(k).times.add(t)); }
   }
+  try { const st = await (await fetch('/api/settings')).json(); for (const [id, w] of Object.entries(st.watch || {})) if (w.on) { const a = agents.find(x => x.id === id); const r = el('div', 'sched'); r.style.cursor = 'pointer'; r.onclick = () => selectChat(id); r.append(el('span', null, '👁 ' + (a ? a.name : id)), el('span', null, 'every ' + (w.every < 60 ? w.every + 'm' : w.every / 60 + 'h'))); pan.append(r); } } catch {}
+  if (pan.querySelector('.note') && pan.children.length > 1) pan.querySelector('.note').remove();
   for (const [id, { nm, times }] of perBot) {
     const r = el('div', 'sched'); r.title = 'Open ' + nm; r.style.cursor = 'pointer'; r.onclick = () => selectChat(id);
     r.append(el('span', null, nm), el('span', null, [...times].sort().join(' '))); pan.append(r);
@@ -1132,6 +1136,27 @@ async function loadSettings() {
     gs.value = groups.some(g => g.id === a.group) ? a.group : '';
     gs.onchange = () => post('/api/settings', { action: 'agentGroup', id: a.id, gid: gs.value }).then(() => { if (gs.value) { openGroups.add(gs.value); saveOpen(); } loadAgents(); }).catch(e => { alertBox(e.message); });
     top.append(gs);
+    { // v2.3 👁 Watch mode
+      const wc = Object.assign({ on: false, every: 30, from: '09:00', to: '20:00', days: [1, 2, 3, 4, 5, 6], gmail: true, whatsapp: false, summary: '20:00' }, (s.watch || {})[a.id] || {});
+      const wb = el('button', 'btn', wc.on ? '👁 Watch ON' : '👁 Watch'); wb.type = 'button'; if (wc.on) wb.classList.add('pri');
+      wb.onclick = () => {
+        if (it.querySelector('.watchbox')) { it.querySelector('.watchbox').remove(); return; }
+        const box = el('div', 'watchbox'); const L = (txt, node) => { const l = el('label'); l.append(document.createTextNode(txt + ' '), node); return l; };
+        const on = el('input'); on.type = 'checkbox'; on.checked = wc.on;
+        const ev = el('select'); for (const m of [15, 30, 60, 120]) ev.add(new Option(m < 60 ? m + ' min' : m / 60 + ' hour' + (m > 60 ? 's' : ''), m)); ev.value = String(wc.every);
+        const fr = el('input'); fr.type = 'text'; fr.value = wc.from; fr.size = 5; const to = el('input'); to.type = 'text'; to.value = wc.to; to.size = 5;
+        const gm = el('input'); gm.type = 'checkbox'; gm.checked = wc.gmail; const wa = el('input'); wa.type = 'checkbox'; wa.checked = wc.whatsapp;
+        const su = el('input'); su.type = 'text'; su.value = wc.summary; su.size = 5; su.placeholder = 'off';
+        const dd = el('span'); DAYN.forEach((nm, i) => { const c = el('input'); c.type = 'checkbox'; c.value = i; c.checked = wc.days.includes(i); dd.append(L(nm, c)); });
+        const sv = el('button', 'btn pri', 'Save watch'); sv.type = 'button'; const msg = el('span', 'msg');
+        sv.onclick = () => post('/api/settings', { action: 'watch', id: a.id, cfg: { on: on.checked, every: Number(ev.value), from: fr.value.trim(), to: to.value.trim(), gmail: gm.checked, whatsapp: wa.checked, summary: su.value.trim(), days: [...dd.querySelectorAll('input:checked')].map(x => Number(x.value)) } })
+          .then(() => { msg.textContent = 'Saved ✓'; wc.on = on.checked; wb.textContent = on.checked ? '👁 Watch ON' : '👁 Watch'; wb.classList.toggle('pri', on.checked); loadSched().catch(() => {}); }).catch(e => { msg.textContent = e.message; });
+        box.append(L('Watch mode ON', on), L('Check every', ev), L('From', fr), L('to', to), dd, L('Gmail', gm), L('WhatsApp', wa), L('Evening summary at', su), sv, msg,
+          el('div', 'note', 'Replies on its own only to contacts in its follow-up list (icloud/<bot>/followups.md). New senders, prices, payments, legal: draft + asks you. "Nothing new" leaves no trace in the chat.'));
+        it.append(box);
+      };
+      top.append(wb);
+    }
     ms.onchange = () => post('/api/settings', { action: 'model', id: a.id, model: ms.value }).catch(e => { alertBox(e.message); });
     top.append(ms);
     const isel = el('select'); isel.style.cssText = ms.style.cssText;
