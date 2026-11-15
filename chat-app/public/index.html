@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.4 rev A (15-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.5 rev A (15-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,10 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.vbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 16px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.vbar button,.vbar select{border:1px solid var(--line);background:var(--surface);color:var(--ink,inherit);border-radius:7px;padding:3px 9px;font-size:12px}
+.vbar button.on{background:rgba(47,158,127,.15);border-color:var(--accent)}
+.m .acts button.spk{border-color:var(--accent)}
 .wk{border:1px solid var(--line);border-radius:12px;padding:12px;margin:8px 0;background:var(--surface)}
 .wktop{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}.wkbig{font-size:24px;font-weight:600}
 .wkseg{display:flex;background:var(--surface-2);border-radius:9px;padding:3px}.wkseg button{border:0;background:none;color:inherit;padding:4px 10px;border-radius:7px;font-size:12px;cursor:pointer}.wkseg button.on{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.12)}
@@ -263,6 +267,9 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
           <input id="ctlUrl" placeholder="website (e.g. accounts.google.com)" aria-label="Open website"><button id="ctlGo" type="button">Go</button><button id="ctlStart" type="button">Start browser</button>
         </div>
       </div>
+      <div class="vbar" id="vbar" hidden><span>🔊 Bolna:</span><button type="button" id="vAuto">Auto OFF</button>
+        <select id="vLang" aria-label="Voice language"><option value="en-IN">Indian English</option><option value="hi-IN">हिन्दी</option></select>
+        <select id="vRate" aria-label="Voice speed"><option value="0.9">Dheere</option><option value="1">Normal</option><option value="1.2">Tez</option></select></div>
       <div class="msgs" id="msgs"></div>
       <div class="files" id="files"></div>
       <div class="queue" id="queue" hidden></div>
@@ -688,6 +695,41 @@ function addMsg(who, text, at, meta = {}) {
   if (who === 'bot' && meta.idx !== undefined) d.append(msgActions(d, text, meta));
   if (at) d.append(el('span', 'at', at)); $('msgs').append(d); scroll(); return d;
 }
+// ---------- v2.5 voice reply (device voice: free, no Claude limit) ----------
+const V = { auto: false, lang: 'en-IN', rate: '1' };
+try { V.auto = localStorage.getItem('vAuto') === '1'; V.lang = localStorage.getItem('vLang') || 'en-IN'; V.rate = localStorage.getItem('vRate') || '1'; } catch {}
+let speakBtn = null;
+function speakable(t) {
+  return plain(t).replace(/https?:\/\/\S+/g, ' link ').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, ' ').replace(/[*_#>`|]/g, ' ').replace(/\s*\n\s*/g, '. ').replace(/\s{2,}/g, ' ').trim();
+}
+function stopSpeak() { try { speechSynthesis.cancel(); } catch {} if (speakBtn) { speakBtn.textContent = '🔊 Suno'; speakBtn = null; } }
+function speakText(text, btn) {
+  const ss = window.speechSynthesis; if (!ss) return;
+  if (btn && speakBtn === btn) { stopSpeak(); return; }
+  stopSpeak();
+  const t = speakable(text); if (!t) return;
+  const parts = t.match(/[^.!?।]+[.!?।]?/g) || [t]; // short pieces: long text stops early on iPhone otherwise
+  const chunks = []; let c = '';
+  for (const p of parts) { if ((c + p).length > 220 && c) { chunks.push(c); c = ''; } c += p; } if (c) chunks.push(c);
+  const voice = ss.getVoices().find(v => v.lang === V.lang) || ss.getVoices().find(v => v.lang.startsWith(V.lang.slice(0, 2)));
+  if (btn) { speakBtn = btn; btn.textContent = '⏹ Ruko'; }
+  chunks.forEach((ch, i) => {
+    const u = new SpeechSynthesisUtterance(ch.trim()); u.lang = V.lang; u.rate = Number(V.rate) || 1; if (voice) u.voice = voice;
+    if (i === chunks.length - 1) u.onend = () => { if (speakBtn === btn) { if (btn) btn.textContent = '🔊 Suno'; speakBtn = null; } };
+    ss.speak(u);
+  });
+}
+if (window.speechSynthesis) {
+  $('vbar').hidden = false;
+  const sync = () => { $('vAuto').textContent = V.auto ? 'Auto ON' : 'Auto OFF'; $('vAuto').classList.toggle('on', V.auto); $('vLang').value = V.lang; $('vRate').value = V.rate; };
+  const save = () => { try { localStorage.setItem('vAuto', V.auto ? '1' : '0'); localStorage.setItem('vLang', V.lang); localStorage.setItem('vRate', V.rate); } catch {} sync(); };
+  $('vAuto').onclick = () => { V.auto = !V.auto; save(); if (V.auto) speakText('Theek hai. Ab main jawab bol ke sunaunga.'); else stopSpeak(); };
+  $('vLang').onchange = () => { V.lang = $('vLang').value; save(); };
+  $('vRate').onchange = () => { V.rate = $('vRate').value; save(); };
+  sync(); speechSynthesis.getVoices(); // starts loading the voice list
+}
+
 // ---------- v2.1 message actions: copy, share, 👍 👎, retry ----------
 const plain = t => String(t).replace(/```[^\n]*\n?/g, '').replace(/\*\*(.+?)\*\*/g, '$1').replace(/^#{1,4}\s+/gm, '').replace(/`([^`\n]+)`/g, '$1').trim();
 function copyText(t, btn) {
@@ -697,6 +739,7 @@ function copyText(t, btn) {
 }
 function msgActions(d, text, meta) {
   const row = el('div', 'acts'); const b = (ic, title, f) => { const k = el('button', null, ic); k.type = 'button'; k.title = title; k.onclick = f; row.append(k); return k; };
+  if (window.speechSynthesis) { const sp = b('🔊 Suno', 'Read this reply aloud (tap again to stop)', () => speakText(text, sp)); sp.classList.add('spk'); }
   const cp = b('📋 Copy', 'Copy the whole reply', () => copyText(plain(text), cp));
   if (navigator.share) b('↗ Share', 'Share (WhatsApp, Mail…)', () => navigator.share({ text: plain(text) }).catch(() => {}));
   const agent = cur;
@@ -733,7 +776,7 @@ async function send(text, opts = {}) {
   if (liveAuto) openLive();
   const here = () => cur === agent;
   addMsg('me', text);
-  const work = el('div', 'tool', 'Working…'); $('msgs').append(work); scroll();
+  const work = el('div', 'tool', 'Working…'); $('msgs').append(work); scroll(); const said = [];
   try {
     const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ agent: cur, message: text, tone, allowOnce: opts.allowOnce || [], always: !!opts.always }) });
@@ -746,7 +789,7 @@ async function send(text, opts = {}) {
         const line = buf.slice(0, i); buf = buf.slice(i + 1); if (!line.trim()) continue;
         const ev = JSON.parse(line);
         if (!here() || !work.isConnected) continue; // user switched agent; server still saves the reply
-        if (ev.t === 'text') { $('msgs').insertBefore(bubble('bot', ev.v), work); }
+        if (ev.t === 'text') { $('msgs').insertBefore(bubble('bot', ev.v), work); said.push(ev.v); }
         if (ev.t === 'tool') work.textContent = 'Using ' + ev.v + '…';
         if (ev.t === 'approve') { work.remove(); addApproval(ev.v); }
         if (ev.t === 'error') { $('msgs').insertBefore(el('div', 'err', ev.v), work); }
@@ -755,6 +798,7 @@ async function send(text, opts = {}) {
     }
   } catch (e) { if (here()) $('msgs').append(el('div', 'err', e.message)); }
   busyAgents.delete(agent); work.remove(); markSide();
+  if (V.auto && said.length && here()) speakText(said.join('\n'));
   if (here()) { syncSend(); loadChat(); }
 }
 function markSide() { loadAgentsQuiet(); }

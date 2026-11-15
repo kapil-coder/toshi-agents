@@ -75,6 +75,15 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check((await p.textContent('#msgs')).includes('memory seen yes'), 'Memory: next run gets the memory');
     await p.fill('#inp', 'failtest'); await p.click('#sendBtn'); await p.waitForTimeout(1500); await p.evaluate(() => loadChat()); await p.waitForTimeout(500);
     check((await p.locator('#msgs .redo').count()) >= 1, 'Failed run shows ↻ Dobara chalao');
+    // v2.5 voice: speechSynthesis stub records what is spoken
+    await p.evaluate(() => { window.__spoken = []; speechSynthesis.speak = u => window.__spoken.push(u.text); speechSynthesis.cancel = () => {}; });
+    check(await p.isVisible('#vbar'), 'Voice bar shows');
+    const lb = p.locator('#msgs .m.bot').last(); await lb.locator('.acts button.spk').click(); await p.waitForTimeout(200);
+    check(await p.evaluate(() => window.__spoken.join(' ').length > 0 && !/\*\*|https?:/.test(window.__spoken.join(' '))), '🔊 Suno speaks clean text');
+    await p.click('#vAuto'); await p.evaluate(() => { window.__spoken = []; });
+    await p.fill('#inp', 'voicetest'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
+    check(await p.evaluate(() => window.__spoken.join(' ').includes('voicetest')), 'Auto voice speaks the new reply');
+    await p.click('#vAuto');
     // v2.1 actions
     await p.fill('#inp', 'codetest'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
     const lastBot = p.locator('#msgs .m.bot').last();
