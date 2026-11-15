@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v2.3 rev A';
+const VERSION = 'v2.3 rev B';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -108,6 +108,8 @@ function runClaude(agent, message, opts, onEvent) {
   if (['opus', 'sonnet', 'haiku'].includes(model)) args.push('--model', model); // per-bot model (v0.9 rev D)
   // v1.3 auto-fresh: after 15 runs in one session, start a new session carrying only the last few messages (saves tokens)
   let freshNote = '';
+  // v2.3 rev B: a saved session that is not a real Claude session ID (e.g. test value "t1") is dropped, with recent context carried over
+  if (chat.sessionId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chat.sessionId)) opts = { ...opts, freshContext: true };
   if ((chat.sessionId && (chat.sessionRuns || 0) >= FRESH_AFTER) || opts.freshContext) {
     const recent = chat.messages.slice(-7, -1).map(m => (m.who === 'me' ? 'Kapil: ' : 'You: ') + String(m.text).slice(0, 600)).join('\n');
     freshNote = 'Context (new session to save tokens; recent messages from this chat):\n' + recent + '\n\nNew message:\n';
@@ -177,7 +179,7 @@ function runClaude(agent, message, opts, onEvent) {
   child.on('close', code => {
     running.delete(agent);
     // v1.9 rev E: the saved session is gone (Claude cannot find it) -> start a fresh session with recent context and retry once
-    if (code !== 0 && !finalText.length && /No conversation found with session ID/i.test(errText) && !opts.freshRetry) {
+    if (code !== 0 && !finalText.length && /No conversation found with session ID|--resume requires a valid session/i.test(errText) && !opts.freshRetry) {
       const cc = loadChat(agent); cc.sessionId = null; cc.sessionRuns = 0; saveChat(agent, cc);
       runClaude(agent, message, { ...opts, freshRetry: true, freshContext: true }, onEvent);
       return;

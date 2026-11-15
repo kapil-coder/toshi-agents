@@ -56,6 +56,11 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     await p.fill('#inp', 'hello'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
     check((await p.textContent('#msgs')).includes('Smoke test reply'), 'Chat send + reply works');
     check((await p.locator('#schedPanel .sched').count()) === 1 && (await p.textContent('#schedPanel')).includes('09:00 10:00'), 'Scheduled panel: one compact line per bot');
+    // v2.3 rev B: a fake saved session ("t1") is dropped before the run (fixes LinkedIn Bot 13-11 error)
+    await p.evaluate(() => fetch('/api/chat?agent=mr-c').then(r => r.json()));
+    require('fs').writeFileSync(require('path').join(tmp, 'icloud', 'chats', 'investor-desk.json'), JSON.stringify({ sessionId: 't1', messages: [] }));
+    const r1 = await p.evaluate(() => fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: 'investor-desk', message: 'resumecheck' }) }).then(r => r.text()));
+    check(r1.includes('Smoke test reply') && !r1.includes('requires a valid session'), 'Bad saved session "t1" is dropped, run works');
     // v2.0 memory
     await p.fill('#inp', 'yaadtest'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
     const mt = await p.textContent('#msgs');
