@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.3 rev B (15-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.4 rev A (15-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,14 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.wk{border:1px solid var(--line);border-radius:12px;padding:12px;margin:8px 0;background:var(--surface)}
+.wktop{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start}.wkbig{font-size:24px;font-weight:600}
+.wkseg{display:flex;background:var(--surface-2);border-radius:9px;padding:3px}.wkseg button{border:0;background:none;color:inherit;padding:4px 10px;border-radius:7px;font-size:12px;cursor:pointer}.wkseg button.on{background:var(--surface);box-shadow:0 1px 2px rgba(0,0,0,.12)}
+.wkbar{display:flex;height:10px;border-radius:5px;overflow:hidden;gap:2px;margin:12px 0 10px;background:var(--line)}
+.wkleg{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:6px;font-size:12px}.wkleg i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}.wkleg b{display:block;font-size:14px;margin-left:14px}
+.wkchart svg{width:100%;height:auto;margin-top:8px}
+.wkrow{display:grid;grid-template-columns:minmax(0,1.3fr) 1fr auto;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--line);font-size:12.5px}
+.wkmini{height:7px;border-radius:4px;background:var(--line);overflow:hidden}.wkmini i{display:block;height:100%;background:#3b82f6}
 .watchbox{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-top:8px;padding:8px;border:1px dashed var(--line);border-radius:8px;font-size:12.5px}
 .watchbox .note{flex-basis:100%}
 .icw{position:relative;flex:none;display:block}
@@ -1033,6 +1041,47 @@ $('sSave').onclick = async () => {
     $('sMsg').textContent = 'Saved ✓'; $('sTimes').value = ''; $('sTask').value = ''; loadSched();
   } catch (e) { $('sMsg').textContent = e.message; }
 };
+// ---------- v2.4 weekly usage (Grok style) ----------
+const SRC_COL = { you: '#3b82f6', routine: '#f59e0b', bot: '#14b8a6', team: '#a855f7' };
+const SRC_NAME = { you: 'You (chat)', routine: 'Schedules + 👁 Watch', bot: 'Bot-to-Bot', team: 'Team Desk' };
+function weekUsage(w) {
+  const card = el('div', 'wk'); const top = el('div', 'wktop'); const h = el('div');
+  const fmt = d => d.split('-').reverse().join('-');
+  h.append(el('div', 'wkbig', w.runs + ' runs'), el('div', 'note', 'This week from Sun ' + fmt(w.from) + ' 22:30 · resets Sunday 22:30 IST (same as Claude)'));
+  const seg = el('div', 'wkseg'); const bs = el('button', 'on', 'By source'), bb = el('button', null, 'By bot'); bs.type = bb.type = 'button'; seg.append(bs, bb);
+  top.append(h, seg); card.append(top);
+  const body = el('div'); card.append(body);
+  const sourceView = () => {
+    body.replaceChildren();
+    const bar = el('div', 'wkbar'); for (const k of Object.keys(SRC_COL)) if (w.bySource[k]) { const sp = el('span'); sp.style.cssText = 'flex:' + w.bySource[k] + ';background:' + SRC_COL[k]; bar.append(sp); }
+    const leg = el('div', 'wkleg'); for (const k of Object.keys(SRC_COL)) { const d = el('div'); const i = el('i'); i.style.background = SRC_COL[k]; d.append(i, document.createTextNode(SRC_NAME[k]), el('b', null, (w.bySource[k] || 0) + '%')); leg.append(d); }
+    body.append(bar, leg, weekChart(w.days));
+  };
+  const botView = () => {
+    body.replaceChildren(); if (!w.bots.length) { body.append(el('div', 'note', 'No bot runs this week yet.')); return; }
+    for (const b of w.bots) { const r = el('div', 'wkrow'); const nm = el('span', null, b.name); const bar = el('span', 'wkmini'); const f = el('i'); f.style.width = Math.max(2, b.pct) + '%'; bar.append(f); r.append(nm, bar, el('span', null, b.pct + '% · ' + b.runs + ' run' + (b.runs === 1 ? '' : 's'))); body.append(r); }
+  };
+  bs.onclick = () => { bs.classList.add('on'); bb.classList.remove('on'); sourceView(); };
+  bb.onclick = () => { bb.classList.add('on'); bs.classList.remove('on'); botView(); };
+  sourceView();
+  card.append(el('div', 'note', '% = share of Toshi Bot\'s work this week. Claude does not give apps your plan %, so the plan limit stays on claude.ai → Settings → Usage.'));
+  return card;
+}
+function weekChart(days) {
+  const W = 700, H = 210, L = 40, R = 690, T = 20, B = 180, keys = ['you', 'routine', 'bot', 'team'];
+  const tot = days.map(d => keys.reduce((a, k) => a + d[k], 0)); const max = Math.max(10, Math.ceil(Math.max(...tot) / 10) * 10);
+  const x = i => L + 20 + i * (R - L - 40) / 6, y = v => B - v / max * (B - T);
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Daily share of work this week">';
+  for (let g = 0; g <= max; g += max / 2) svg += '<line x1="' + L + '" x2="' + R + '" y1="' + y(g) + '" y2="' + y(g) + '" stroke="currentColor" stroke-opacity=".12"/><text x="4" y="' + (y(g) + 4) + '" font-size="11" fill="currentColor" fill-opacity=".55">' + g + '%</text>';
+  const acc = days.map(() => 0);
+  const layers = keys.map(k => { const lo = acc.slice(); days.forEach((d, i) => { acc[i] += d[k]; }); return { k, lo, hi: acc.slice() }; });
+  for (const l of layers.reverse()) {
+    const pts = l.hi.map((v, i) => x(i) + ',' + y(v)).join(' ') + ' ' + l.lo.map((v, i) => x(i) + ',' + y(v)).reverse().join(' ');
+    svg += '<polygon points="' + pts + '" fill="' + SRC_COL[l.k] + '" fill-opacity=".85"/>';
+  }
+  days.forEach((d, i) => { svg += '<text x="' + (x(i) - 16) + '" y="' + (H - 8) + '" font-size="11" fill="currentColor" fill-opacity=".55">' + d.d.slice(8) + '-' + d.d.slice(5, 7) + '</text>'; });
+  const box = el('div', 'wkchart'); box.innerHTML = svg + '</svg>'; return box;
+}
 async function loadUsage() {
   const u = await (await fetch('/api/usage')).json(); const box = $('usageBox'); box.replaceChildren();
   const tiles = el('div', 'f2');
@@ -1040,6 +1089,7 @@ async function loadUsage() {
   tiles.append(cost);
   const work = el('div', 'item'); work.append(el('span', 'meta', 'Bot work'), el('b', null, 'Today ' + u.today.runs + ' runs · This month ' + u.month.runs + ' runs'), el('span', 'meta', u.today.turns + ' steps today'));
   tiles.append(work); box.append(tiles);
+  if (u.week) box.append(weekUsage(u.week));
   if (!u.agents.length) { box.append(el('div', 'note', 'No runs counted yet.')); return; }
   const total = u.agents.reduce((a, x) => a + x.tokens, 0) || 1;
   const tw = el('div'); tw.style.cssText = 'overflow-x:auto;margin-top:8px';

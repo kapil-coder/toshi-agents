@@ -16,6 +16,12 @@ const fixture = { ntfyTopic: 'toshi-smoke123', notify: true, autoSend: true, dai
   team: { enabled: true, group: 'Toshi Bot Team', trigger: '@Toshi', members: 'Manoj, 9315950722\nBobby, 9315950739', topics: 'Order status', interval: 120, model: 'sonnet',
     refreshOn: true, refreshTimes: '08:00', refreshAgent: 'mr-c', sources: 'Zoho', lastRefresh: 'x' } };
 fs.writeFileSync(path.join(tmp, 'icloud', 'app-settings.json'), JSON.stringify(fixture));
+{ // v2.4 weekly usage fixture (now, IST)
+  const st = new Date().toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
+  const d = new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+  const row = (agent, kind, tok) => JSON.stringify({ d, t: st, agent, kind, usd: 0, turns: 1, ms: 1, inTok: tok, outTok: 0 });
+  fs.writeFileSync(path.join(tmp, 'icloud', 'usage.jsonl'), [row('mr-c', 'chat', 600), row('linkedin-desk', 'schedule', 200), row('linkedin-desk', 'handoff', 100), row('mr-c', 'team', 100)].join('\n') + '\n');
+}
 const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'toshi-bin-')); fs.copyFileSync(path.join(ROOT, 'tests', 'fake-claude.sh'), path.join(bin, 'claude')); fs.chmodSync(path.join(bin, 'claude'), 0o755);
 const PORT = 3990 + Math.floor(Math.random() * 9);
 const srv = spawn('node', ['chat-app/server.js'], { cwd: tmp, env: { ...process.env, PORT: String(PORT), PATH: bin + ':' + process.env.PATH, HOME: tmp, TOSHI_WATCH_MS: '2000' } });
@@ -122,6 +128,9 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check(await p.inputValue('#dayAlert') === '60', 'Settings: daily alert loads');
     check(!(await p.isDisabled('#tmSave')), 'Settings: Save buttons enabled');
     check((await p.locator('#agentList .item').count()) >= 3, 'Settings: My agents list loads');
+    check((await p.textContent('#usageBox')).includes('Schedules + 👁 Watch') && (await p.locator('#usageBox .wkchart svg polygon').count()) === 4, 'Weekly usage: by source + chart');
+    await p.locator('#usageBox .wkseg button', { hasText: 'By bot' }).click(); await p.waitForTimeout(200);
+    check((await p.locator('#usageBox .wkrow').count()) >= 2, 'Weekly usage: by bot');
     check(await p.isChecked('#zohoDrafts'), 'Settings: Zoho Books drafts ON by default');
     // v1.9 order: move LinkedIn Desk up -> first after Mr. C (it is ungrouped again after group test? ensure ungrouped)
     await p.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'agentGroup', id: 'linkedin-desk', gid: '' }) }));

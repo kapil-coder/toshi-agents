@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v2.3 rev B';
+const VERSION = 'v2.4 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -435,7 +435,7 @@ function startRun(agent, text, opts, onEvent, meta = {}) {
   }
   c.messages.push({ who: 'me', text: meta.label ? meta.label + '\n' + text : text, at: stamp() }); delete c.pending; if (meta.handoff) c.unread = true; saveChat(agent, c);
   const what = meta.watch ? 'Watch check' : meta.handoff ? 'Task from ' + meta.from : 'Scheduled task ' + meta.time;
-  opts.kind = meta.handoff ? 'handoff' : meta.scheduled ? 'schedule' : 'chat';
+  opts.kind = meta.handoff ? 'handoff' : String(meta.time || '').startsWith('team') ? 'team' : (meta.watch || /^👁/.test(meta.label || '')) ? 'watch' : meta.scheduled ? 'schedule' : 'chat';
   return runClaude(agent, text, opts, ev => {
     onEvent(ev);
     if (meta.scheduled && ev.t === 'approve') notify('Toshi Bot: ' + agentName(agent) + ' needs your Haan', what + ' is waiting for your approval.');
@@ -628,6 +628,31 @@ function recordUsage(agent, kind, ev) {
 function readUsage() {
   try { return fs.readFileSync(USAGE_FILE, 'utf8').split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); } catch { return []; }
 }
+// v2.4 weekly view (Grok style): week resets Sunday 22:30 IST like the Claude plan; share = tokens (runs if no tokens)
+const IST_MS = 5.5 * 3600e3;
+function weekStart() {
+  const ist = new Date(Date.now() + IST_MS); const s = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate() - ist.getUTCDay(), 22, 30));
+  if (s.getTime() > ist.getTime()) s.setUTCDate(s.getUTCDate() - 7);
+  return s.getTime() - IST_MS; // real epoch
+}
+const rowTime = r => { const m = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2})/.exec(r.t || ''); return m ? Date.UTC(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]) - IST_MS : 0; };
+const SRC = k => k === 'handoff' ? 'bot' : k === 'team' ? 'team' : (k === 'schedule' || k === 'watch') ? 'routine' : 'you';
+function usageWeek() {
+  const ws = weekStart(), rows = readUsage().filter(r => rowTime(r) >= ws);
+  const w = r => (r.inTok + r.outTok) || 1, total = rows.reduce((a, r) => a + w(r), 0) || 1;
+  const bySource = { you: 0, routine: 0, bot: 0, team: 0 }, byBot = {}, days = [];
+  for (let i = 0; i < 7; i++) { const d = new Date(ws + IST_MS + 90 * 60e3 + i * 864e5); days.push({ d: d.toISOString().slice(0, 10), you: 0, routine: 0, bot: 0, team: 0 }); }
+  for (const r of rows) {
+    const src = SRC(r.kind); bySource[src] += w(r);
+    (byBot[r.agent] = byBot[r.agent] || { id: r.agent, name: agentName(r.agent), w: 0, runs: 0 }); byBot[r.agent].w += w(r); byBot[r.agent].runs++;
+    const day = days.find(x => x.d === r.d) || days[0]; day[src] += w(r); // Sunday-night runs (after 22:30) count in the first day
+  }
+  const pct = x => Math.round(x * 1000 / total) / 10;
+  return { from: new Date(ws + IST_MS).toISOString().slice(0, 10), runs: rows.length,
+    bySource: Object.fromEntries(Object.entries(bySource).map(([k, v]) => [k, pct(v)])),
+    bots: Object.values(byBot).map(b => ({ id: b.id, name: b.name, runs: b.runs, pct: pct(b.w) })).sort((a, b) => b.pct - a.pct),
+    days: days.map(d => ({ d: d.d, you: pct(d.you), routine: pct(d.routine), bot: pct(d.bot), team: pct(d.team) })) };
+}
 function usageSummary() {
   const rows = readUsage(), today = nowIST().date, month = today.slice(0, 7);
   const sum = list => ({ runs: list.length, usd: +list.reduce((a, r) => a + r.usd, 0).toFixed(2), turns: list.reduce((a, r) => a + r.turns, 0),
@@ -635,7 +660,7 @@ function usageSummary() {
   const per = {};
   for (const r of rows.filter(r => r.d.startsWith(month))) (per[r.agent] = per[r.agent] || []).push(r);
   return {
-    since: rows[0] ? rows[0].t : null, today: sum(rows.filter(r => r.d === today)), month: sum(rows.filter(r => r.d.startsWith(month))),
+    week: usageWeek(), since: rows[0] ? rows[0].t : null, today: sum(rows.filter(r => r.d === today)), month: sum(rows.filter(r => r.d.startsWith(month))),
     agents: Object.entries(per).map(([id, l]) => ({ id, name: agentName(id), ...sum(l), today: l.filter(r => r.d === today).length,
       kinds: l.reduce((a, r) => (a[r.kind] = (a[r.kind] || 0) + 1, a), {}) })).sort((a, b) => b.usd - a.usd),
   };
