@@ -116,6 +116,9 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     const after = await p.evaluate(() => fetch('/api/chat?agent=investor-desk').then(r => r.json()).then(d => d.messages.length));
     check(wst.lastRun > 0 && after === before, 'Watch mode ran; NO_NEW left no trace in chat');
     await p.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'watch', id: 'investor-desk', cfg: { on: false } }) }));
+    // v2.6 Mac screen control: request goes with mac:true (on Linux test machine it answers 'Mac mini only')
+    const mr = await p.evaluate(() => fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: 'mr-c', mac: true, type: 'click', x: .5, y: .5 }) }).then(r => r.json()));
+    check(/Mac mini only/.test(mr.error || ''), 'Mac screen control routes to Mac control');
     // v1.9 rev B: long scheduled message shows short
     await p.evaluate(() => addMsg('me', '⏰ Scheduled 19:00 IST\n' + 'LinkedIn evening desk steps '.repeat(20), 'x'));
     const lm = p.locator('#msgs .m.me').last();

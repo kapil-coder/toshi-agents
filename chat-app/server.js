@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v2.5 rev A';
+const VERSION = 'v2.6 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -726,6 +726,38 @@ function cdpRun(agent, steps, cb) {
   });
 }
 const KEYS = { Enter: 13, Backspace: 8, Tab: 9, Escape: 27, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39, Delete: 46 };
+// ---------- v2.6 Mac screen control from the Live panel (whole Mac, not only the bot browser) ----------
+// Uses macOS's own JavaScript for Automation: no app to install. Needs Accessibility permission for "node" once.
+const JXA_CLICK = `ObjC.import('CoreGraphics'); ObjC.import('AppKit'); ObjC.import('ApplicationServices');
+function run(argv) {
+  if (typeof $.AXIsProcessTrusted === 'function' && !$.AXIsProcessTrusted()) return 'NO_ACCESS';
+  const f = $.NSScreen.mainScreen.frame, p = { x: Number(argv[0]) * f.size.width, y: Number(argv[1]) * f.size.height };
+  for (const t of [$.kCGEventMouseMoved, $.kCGEventLeftMouseDown, $.kCGEventLeftMouseUp]) $.CGEventPost($.kCGHIDEventTap, $.CGEventCreateMouseEvent(null, t, p, $.kCGMouseButtonLeft));
+  return 'OK';
+}`;
+const JXA_KEYS = `ObjC.import('AppKit'); ObjC.import('ApplicationServices');
+function run(argv) {
+  if (typeof $.AXIsProcessTrusted === 'function' && !$.AXIsProcessTrusted()) return 'NO_ACCESS';
+  const se = Application('System Events');
+  if (argv[0] === 'type') se.keystroke(argv[1]); else se.keyCode(Number(argv[1]));
+  return 'OK';
+}`;
+const MAC_KEYS = { Enter: 36, Backspace: 51, Tab: 48, Escape: 53, PageDown: 121, PageUp: 116 };
+function controlMac(b, cb) {
+  if (process.platform !== 'darwin') return cb(new Error('Mac control works on the Mac mini only.'));
+  const done = (e, out) => {
+    screenCache.at = 0; // next Live frame is fresh
+    if (String(out || '').trim() === 'NO_ACCESS') return cb(new Error('Allow once on the Mac: System Settings > Privacy & Security > Accessibility > + > node (then switch it on).'));
+    cb(e ? new Error('Mac control failed: ' + String(e.message).slice(0, 200)) : null);
+  };
+  const jxa = (code, args) => execFile('/usr/bin/osascript', ['-l', 'JavaScript', '-e', code, ...args.map(String)], { timeout: 15000 }, (e, out) => done(e, out));
+  if (b.type === 'click') return jxa(JXA_CLICK, [Math.max(0, Math.min(1, Number(b.x))), Math.max(0, Math.min(1, Number(b.y)))]);
+  if (b.type === 'type') return jxa(JXA_KEYS, ['type', String(b.text || '').slice(0, 500)]);
+  if (b.type === 'key') { const k = MAC_KEYS[b.key]; return k ? jxa(JXA_KEYS, ['key', k]) : cb(new Error('Unknown key')); }
+  if (b.type === 'scroll') return jxa(JXA_KEYS, ['key', Number(b.dy) < 0 ? MAC_KEYS.PageUp : MAC_KEYS.PageDown]);
+  if (b.type === 'nav') { let u = String(b.url || '').trim(); if (!/^https?:\/\//i.test(u)) u = 'https://' + u; return execFile('/usr/bin/open', [u], { timeout: 15000 }, e => done(e)); }
+  cb(new Error('Not available for the Mac screen (use it in the bot computer view).'));
+}
 function controlBrowser(agent, b, cb) {
   const size = { method: 'Runtime.evaluate', params: { expression: 'JSON.stringify([innerWidth, innerHeight])', returnByValue: true } };
   const wh = r => { try { return JSON.parse(r[0].result.value); } catch { return [1400, 900]; } };
@@ -1106,6 +1138,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/control') {
       const b = await readBody(req);
+      if (b.mac) return controlMac(b, err => err ? json(res, 400, { error: err.message }) : json(res, 200, { ok: true })); // v2.6
       if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });
       if (typeof WebSocket === 'undefined' && b.type !== 'start') return json(res, 500, { error: 'Node.js 22+ needed.' });
       return controlBrowser(b.agent, b, err => { shotCache.delete(b.agent); err ? json(res, 400, { error: err.message }) : json(res, 200, { ok: true }); });

@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.5 rev A (15-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.6 rev A (16-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -956,15 +956,15 @@ function liveFrame() {
 function liveUrl() { return '/api/screen?agent=' + encodeURIComponent(cur) + (liveMac ? '&mode=mac' : ''); }
 // 🖱 Control mode: clicks on the live picture go to the bot's browser
 let liveCtl = false;
-const ctl = (body) => fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: cur, ...body }) })
+const ctl = (body) => fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: cur, mac: liveMac, ...body }) }) // v2.6: Mac screen too
   .then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error); setTimeout(liveFrame, 350); setTimeout(liveFrame, 1200); })
   .catch(e => { $('liveErr').textContent = e.message; $('liveErr').hidden = false; });
 $('liveCtl').onclick = () => {
-  liveCtl = !liveCtl; if (liveCtl && liveMac) { liveMac = false; $('liveMode').textContent = 'Mac screen'; }
+  liveCtl = !liveCtl; ctlMacUi();
   $('livePanel').classList.toggle('ctl', liveCtl); $('ctlBar').hidden = !liveCtl; $('liveCtl').textContent = liveCtl ? '✋ Stop control' : '🖱 Control';
 };
 $('liveImg').addEventListener('click', e => {
-  if (!liveCtl || liveMac) return; const r = $('liveImg').getBoundingClientRect();
+  if (!liveCtl) return; const r = $('liveImg').getBoundingClientRect();
   ctl({ type: 'click', x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height });
 });
 $('ctlSend').onclick = () => { const t = $('ctlText').value; if (!t) return; ctl({ type: 'type', text: t }); $('ctlText').value = ''; };
@@ -975,7 +975,9 @@ $('ctlBack').onclick = () => ctl({ type: 'back' });
 $('ctlGo').onclick = () => { ctl({ type: 'nav', url: $('ctlUrl').value }); };
 $('ctlUrl').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('ctlGo').click(); } });
 $('ctlStart').onclick = () => ctl({ type: 'start' });
-$('liveMode').onclick = () => { liveMac = !liveMac; $('liveMode').textContent = liveMac ? "Bot's computer" : 'Mac screen'; liveFrame(); };
+$('liveMode').onclick = () => { liveMac = !liveMac; $('liveMode').textContent = liveMac ? "Bot's computer" : 'Mac screen'; ctlMacUi(); liveFrame(); };
+// v2.6: in Mac-screen control, Back / Start browser don't apply; Go opens the website in the Mac's own browser
+function ctlMacUi() { for (const id of ['ctlBack', 'ctlStart']) $(id).hidden = liveCtl && liveMac; $('ctlUrl').placeholder = liveMac ? 'website (opens on the Mac)' : 'website (e.g. accounts.google.com)'; }
 function openLive() { $('livePanel').hidden = false; liveFrame(); clearInterval(liveTimer); liveTimer = setInterval(() => { if (!document.hidden && !$('livePanel').hidden) liveFrame(); }, 2000); }
 function closeLive() { $('livePanel').hidden = true; clearInterval(liveTimer); liveTimer = null; }
 $('liveBtn').onclick = () => { if ($('livePanel').hidden) { openLive(); liveAuto = true; } else { closeLive(); liveAuto = false; } try { localStorage.setItem('liveAuto', liveAuto ? '1' : '0'); } catch {} };
