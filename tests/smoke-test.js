@@ -95,6 +95,11 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     const sc2 = await p.evaluate(id => fetch('/api/schedules').then(r => r.json()).then(l => l.find(x => x.id === id)), sc.id);
     check(sc2.times.join() === '09:45' && sc2.task === 'edited', 'Schedule edit works');
     await p.evaluate(id => fetch('/api/schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id }) }), sc.id);
+    // v2.7 rev C: remove an attached file before sending
+    await p.evaluate(() => { attached = [{ name: 'a.xlsx', path: 'x/a.xlsx' }, { name: 'b.xlsm', path: 'x/b.xlsm' }]; showFiles(); });
+    await p.locator('#files .file .fx').first().click(); await p.waitForTimeout(100);
+    check((await p.locator('#files .file').count()) === 1 && (await p.textContent('#files')).includes('b.xlsm'), 'Attachment ✕ removes one file');
+    await p.evaluate(() => { attached = []; showFiles(); });
     // v2.1 actions
     await p.fill('#inp', 'codetest'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
     const lastBot = p.locator('#msgs .m.bot').last();

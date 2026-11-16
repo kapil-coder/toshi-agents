@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.7 rev B (17-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.7 rev C (17-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,8 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.file .fx,.fx.all{border:0;background:none;color:var(--bad);font-size:14px;cursor:pointer;padding:0 4px;margin-left:4px}
+.fx.all{font-size:12px;text-decoration:underline}
 .bs{border-top:1px solid var(--line);padding:6px 0;font-size:12px}.bs .t{display:flex;justify-content:space-between;align-items:center;gap:6px}
 .bs .t b{font-family:var(--f-mono,monospace);font-size:11.5px}.bs small{color:var(--muted);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bs.off{opacity:.55}
@@ -834,7 +836,11 @@ async function loadAgentsQuiet() {
 async function loadChatMeta() { const d = await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json(); $('allowList').textContent = d.allow.length ? d.allow.map(label).join(', ') : 'None yet'; }
 
 let attached = [];
-function showFiles() { const f = $('files'); f.replaceChildren(); for (const a of attached) f.append(el('span', 'file', '📄 ' + a.name)); }
+function showFiles() { // v2.7 rev C: ✕ removes a file before sending (the copy in iCloud uploads stays)
+  const f = $('files'); f.replaceChildren();
+  attached.forEach((a, i) => { const c = el('span', 'file', '📄 ' + a.name + ' '); const x = el('button', 'fx', '✕'); x.type = 'button'; x.title = 'Remove'; x.setAttribute('aria-label', 'Remove ' + a.name); x.onclick = () => { attached.splice(i, 1); showFiles(); }; c.append(x); f.append(c); });
+  if (attached.length > 1) { const all = el('button', 'fx all', 'Remove all'); all.type = 'button'; all.onclick = () => { attached = []; showFiles(); }; f.append(all); }
+}
 async function upload(files) {
   for (const file of files) {
     const tag = el('span', 'file', '⏳ ' + file.name); $('files').append(tag);

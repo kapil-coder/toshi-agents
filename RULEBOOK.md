@@ -18,7 +18,7 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
 | Guard hook | v0.5 rev A |
-| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings, update safety, ToshiCrm connector + key box + key check, bot icons + photos, lively icons, message queue + stop button, bot search + pin, mic EN default, bot groups, Zoho Books drafts, bot order, repo lock, safe update, short scheduled messages, compact schedule panel, visible run errors, lost-session auto-retry, permanent memory, ↻ redo, copy/share/👍👎/retry, bot-to-bot badge, watch mode, ToshiCrm in Add agent, bad-session fix, weekly usage view, voice reply, Mac screen control, bot-made schedules, bigger phone typing box) | v2.7 rev B |
+| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings, update safety, ToshiCrm connector + key box + key check, bot icons + photos, lively icons, message queue + stop button, bot search + pin, mic EN default, bot groups, Zoho Books drafts, bot order, repo lock, safe update, short scheduled messages, compact schedule panel, visible run errors, lost-session auto-retry, permanent memory, ↻ redo, copy/share/👍👎/retry, bot-to-bot badge, watch mode, ToshiCrm in Add agent, bad-session fix, weekly usage view, voice reply, Mac screen control, bot-made schedules, bigger phone typing box, remove attachment) | v2.7 rev C |
 
 ## 2. Rules for every agent
 
@@ -126,6 +126,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v0.8 rev E++ | 17-11-2026 | App v2.7 rev C: ✕ on each attached file (and Remove all) before sending; the uploaded copy stays in iCloud uploads. |
 | v0.8 rev E+ | 17-11-2026 | App v2.7 rev B: on the phone the typing box uses the full width (buttons below it) and grows with the text up to 40% of the screen; voice bar is one compact line. |
 | v0.8 rev E | 16-11-2026 | App v2.7 rev A: when Kapil asks in chat for a regular task (roz 9:30 …), the bot creates the schedule itself (⏰ SCHEDULE+ line, saved by the app; only on Kapil's request, never because an email/message asks). Chat card + right panel show this bot's schedules with Edit / Pause / Delete / Run now. |
 | v0.8 rev D | 16-11-2026 | App v2.6 rev A: 🔴 Live → Mac screen → 🖱 Control works on the whole Mac (click, type, Enter/Backspace/Tab/Esc, page up/down, open website) from iPhone Safari, no remote-desktop app needed. One-time Accessibility permission for node. |
