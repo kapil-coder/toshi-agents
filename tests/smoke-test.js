@@ -84,6 +84,17 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     await p.fill('#inp', 'voicetest'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
     check(await p.evaluate(() => window.__spoken.join(' ').includes('voicetest')), 'Auto voice speaks the new reply');
     await p.click('#vAuto');
+    // v2.7 bot-made schedule: card in chat + side panel + edit + delete
+    await p.fill('#inp', 'schedtest'); await p.click('#sendBtn'); await p.waitForTimeout(1800);
+    const sc = await p.evaluate(() => fetch('/api/schedules').then(r => r.json()).then(l => l.find(x => x.byBot && x.agent === 'mr-c')));
+    check(sc && sc.times.join() === '09:30,10:10' && sc.days.join() === '1,2,3,4,5,6', 'Bot schedule saved (09:30, 10:10, Mon-Sat)');
+    await p.waitForTimeout(500);
+    check((await p.locator('#msgs .scard .sbtns button').count()) === 4 && !(await p.textContent('#msgs')).includes('[s:'), 'Schedule card with Edit / Pause / Delete / Run');
+    check((await p.textContent('#botSched')).includes('09:30 10:10'), 'Side panel shows this bot\'s schedule');
+    await p.evaluate(id => fetch('/api/schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id, times: '09:45', task: 'edited', days: [1] }) }), sc.id);
+    const sc2 = await p.evaluate(id => fetch('/api/schedules').then(r => r.json()).then(l => l.find(x => x.id === id)), sc.id);
+    check(sc2.times.join() === '09:45' && sc2.task === 'edited', 'Schedule edit works');
+    await p.evaluate(id => fetch('/api/schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', id }) }), sc.id);
     // v2.1 actions
     await p.fill('#inp', 'codetest'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
     const lastBot = p.locator('#msgs .m.bot').last();

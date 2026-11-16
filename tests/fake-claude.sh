@@ -10,6 +10,7 @@ if [[ "$last" == *memcheck* ]]; then m=no; [[ "$*" == *"GST 18% alag dikhana"* &
 if [[ "$last" == *codetest* ]]; then echo '{"type":"assistant","message":{"content":[{"type":"text","text":"Yeh raha:\n```\nPOINT SIX TEXT\n```\nDone **ok**"}]}}'; echo '{"type":"result","subtype":"success","session_id":"11111111-1111-1111-1111-111111111111","permission_denials":[]}'; exit 0; fi
 if [[ "$last" == *"WATCH MODE check"* ]]; then echo '{"type":"assistant","message":{"content":[{"type":"text","text":"NO_NEW"}]}}'; echo '{"type":"result","subtype":"success","session_id":"11111111-1111-1111-1111-111111111111","permission_denials":[]}'; exit 0; fi
 [[ "$*" == *"--resume t1"* ]] && { echo "Error: --resume requires a valid session ID or session title when used with --print." >&2; exit 1; }
+if [[ "$last" == *schedtest* ]]; then echo '{"type":"assistant","message":{"content":[{"type":"text","text":"Theek hai.\n⏰ SCHEDULE+: 9:30, 10:10 | Mon-Sat | WhatsApp Sambhav: office timing"}]}}'; echo '{"type":"result","subtype":"success","session_id":"11111111-1111-1111-1111-111111111111","permission_denials":[]}'; exit 0; fi
 [[ "$last" == *failtest* ]] && { echo "Claude usage limit reached (fake)" >&2; exit 1; }
 echo '{"type":"system","subtype":"init","session_id":"11111111-1111-1111-1111-111111111111","tools":["Read","mcp__playwright__browser_click","mcp__claude_ai_Gmail__send_message"]}'
 echo '{"type":"assistant","message":{"content":[{"type":"text","text":"Smoke test reply: '"${last//[^a-z0-9 ]/}"'"}]}}'

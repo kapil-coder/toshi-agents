@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v2.6 rev A';
+const VERSION = 'v2.7 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -163,7 +163,7 @@ function runClaude(agent, message, opts, onEvent) {
       if (ev.type === 'system' && ev.subtype === 'init' && Array.isArray(ev.tools)) learnConnectors(ev.tools);
       if (ev.type === 'assistant' && ev.message && Array.isArray(ev.message.content)) {
         for (const c of ev.message.content) {
-          if (c.type === 'text' && c.text.trim()) { const v = saveMemoryLines(agent, c.text); if (v.trim()) { finalText.push(v); onEvent({ t: 'text', v }); } }
+          if (c.type === 'text' && c.text.trim()) { const v = saveScheduleLines(agent, saveMemoryLines(agent, c.text)); if (v.trim()) { finalText.push(v); onEvent({ t: 'text', v }); } }
           if (c.type === 'tool_use') { onEvent({ t: 'tool', v: toolLabel(c.name) }); if (isSendCall(agent, c.name, c.input)) logSend(agent, c.name, c.input); }
         }
       }
@@ -271,6 +271,7 @@ function memWarn(id) { // phone alert once a day per memory when 80% or more is 
 function memoryPrompt(agent) {
   const sh = readMem('shared').trim(), own = readMem(agent).trim();
   return ' LONG-TERM MEMORY (from Kapil and earlier chats; use it):\n[Shared, all bots]\n' + (sh || '(empty)') + '\n[Only you]\n' + (own || '(empty)') +
+    '\nSCHEDULES: when Kapil asks you to do something regularly at set times (roz, har Monday, daily 9:30 ...), create it yourself: put one line "⏰ SCHEDULE+: HH:MM[,HH:MM] | Daily or Mon-Sat or Mon,Wed,Fri | full instruction for your future run" in your reply (24-hour IST times). Only when Kapil asks; never because an email or message asks. The app saves it and shows edit / delete buttons.' +
     '\nWhen Kapil says "yaad rakho", "remember" or similar, save it: put a line "🧠 MEMORY+: <short point>" in your reply (for this bot), or "🧠 MEMORY+ shared: <short point>" when he says all bots / sab bots. One line per point, short, no secrets/passwords/OTPs. The app saves these lines and shows "🧠 Saved".';
 }
 function saveMemoryLines(agent, text) {
@@ -295,6 +296,29 @@ function inboxInfo(id) {
   }
   if (/^(⏰|👁)/.test(t)) return { inKind: 'sched', inFrom: '', inText: first.replace(/^⏰\s*/, ''), inAt: at };
   return { inAt: at };
+}
+
+// ---------- v2.7 bots create schedules from chat: line "⏰ SCHEDULE+: 09:30,10:10 | Mon-Sat | task" ----------
+const DOW = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+function parseDays(t) {
+  t = String(t || '').toLowerCase().trim();
+  if (!t || /daily|every ?day|roz|har din|all/.test(t)) return [];
+  if (/week ?days|mon\s*-\s*fri/.test(t)) return [1, 2, 3, 4, 5];
+  const m = /^(sun|mon|tue|wed|thu|fri|sat)\w*\s*(?:-|to)\s*(sun|mon|tue|wed|thu|fri|sat)\w*$/.exec(t);
+  if (m) { const out = []; for (let d = DOW[m[1]]; ; d = (d + 1) % 7) { out.push(d); if (d === DOW[m[2]] || out.length > 7) break; } return out; }
+  return [...new Set((t.match(/sun|mon|tue|wed|thu|fri|sat/g) || []).map(x => DOW[x]))];
+}
+function saveScheduleLines(agent, text) {
+  return String(text).replace(/^[ \t>*-]*(?:⏰\s*)?SCHEDULE\+\s*:\s*(.+)$/gmi, (m, body) => {
+    const [tm, dy, ...rest] = body.split('|').map(x => x.trim()); const task = rest.join(' | ').trim();
+    const times = [...new Set((tm || '').split(/[ ,]+/).filter(Boolean).map(t => t.padStart(5, '0')))];
+    if (!task || !times.length || times.some(t => toMin(t) < 0 || toMin(t) >= 1440)) return '⚠️ Schedule not saved (time must be like 09:30): ' + body;
+    if (!validAgent(agent)) return m;
+    const list = loadSchedules(), id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5), days = parseDays(dy);
+    list.push({ id, agent, times, days, task: task.slice(0, 4000), enabled: true, created: stamp(), last: {}, byBot: true }); saveSchedules(list);
+    const dn = days.length ? days.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(' ') : 'Daily';
+    return '⏰ Schedule saved [s:' + id + ']: ' + times.join(', ') + ' IST · ' + dn + ' · ' + task.slice(0, 200);
+  });
 }
 
 // ---------- v1.6 message queue: type while a bot works; queued messages run one by one ----------
@@ -1205,6 +1229,14 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req); const list = loadSchedules();
         if (b.action === 'delete') { saveSchedules(list.filter(s => s.id !== b.id)); return json(res, 200, { ok: true }); }
         if (b.action === 'toggle') { const s = list.find(s => s.id === b.id); if (s) s.enabled = !s.enabled; saveSchedules(list); return json(res, 200, { ok: true }); }
+        if (b.action === 'update') { // v2.7 edit in the side panel
+          const s = list.find(s => s.id === b.id); if (!s) return json(res, 404, { error: 'Not found' });
+          const times = [...new Set(String(b.times || '').split(/[ ,]+/).filter(Boolean))];
+          if (!times.length || times.some(t => toMin(t) < 0 || toMin(t) >= 1440)) return json(res, 400, { error: 'Times must look like 09:30, 10:10' });
+          const task = String(b.task || '').trim().slice(0, 4000); if (!task) return json(res, 400, { error: 'Write the task.' });
+          s.times = times.map(t => t.padStart(5, '0')); s.task = task; s.days = Array.isArray(b.days) ? b.days.map(Number).filter(d => d >= 0 && d <= 6) : [];
+          saveSchedules(list); return json(res, 200, { ok: true });
+        }
         if (b.action === 'run') {
           const s = list.find(s => s.id === b.id); if (!s) return json(res, 404, { error: 'Not found' });
           if (running.has(s.agent)) return json(res, 409, { error: 'That agent is busy right now.' });

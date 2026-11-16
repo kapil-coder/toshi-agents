@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.6 rev A (16-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.7 rev A (16-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,14 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.bs{border-top:1px solid var(--line);padding:6px 0;font-size:12px}.bs .t{display:flex;justify-content:space-between;align-items:center;gap:6px}
+.bs .t b{font-family:var(--f-mono,monospace);font-size:11.5px}.bs small{color:var(--muted);display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bs.off{opacity:.55}
+.sbtns{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}.sbtns button{border:1px solid var(--line);background:var(--surface);color:inherit;border-radius:6px;padding:1px 7px;font-size:11.5px;cursor:pointer}
+.sbtns .del{color:var(--bad)}
+.sedit{display:grid;gap:5px;margin-top:6px;font-size:12px}.sedit input,.sedit textarea{border:1px solid var(--line);border-radius:6px;padding:4px 6px;background:var(--surface-2);color:inherit;font:inherit}
+.sedit .dd{display:flex;flex-wrap:wrap;gap:4px 8px}
+.m .scard{margin-top:8px;border:1px solid var(--accent);border-radius:10px;padding:8px 10px;background:rgba(47,158,127,.07);white-space:normal}
 .vbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:6px 16px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--muted)}
 .vbar button,.vbar select{border:1px solid var(--line);background:var(--surface);color:var(--ink,inherit);border-radius:7px;padding:3px 9px;font-size:12px}
 .vbar button.on{background:rgba(47,158,127,.15);border-color:var(--accent)}
@@ -301,7 +309,9 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
       <h4>Safety</h4>
       <div class="note">Zoho Books: drafts only. Zoho CRM: read-only.</div>
       <div class="note">Sends: auto when you ask. Deletes, payments: need your Haan.</div>
-      <h4>Scheduled</h4>
+      <h4 id="botSchedH">This bot's schedules</h4>
+      <div id="botSched"></div>
+      <h4>All bots</h4>
       <div id="schedPanel"><div class="note">None yet</div></div>
       <div class="note"><button class="ghost" id="openAuto2" type="button">Manage schedules</button></div>
       <h4>Approved for this agent</h4>
@@ -541,7 +551,7 @@ function curInfo() {
   return agents.find(x => x.id === cur) || agents[0];
 }
 function toggleGroup(gid) { openGroups.has(gid) ? openGroups.delete(gid) : openGroups.add(gid); saveOpen(); filterAgents(); }
-function selectChat(id) { if (cur === id) return; cur = id; attached = []; showFiles(); try { localStorage.setItem('agent', cur); } catch {} loadAgents(); }
+function selectChat(id) { if (cur === id) return; cur = id; attached = []; showFiles(); try { localStorage.setItem('agent', cur); } catch {} loadAgents(); loadSched().catch(() => {}); }
 async function loadAgents() {
   const [al, gl] = await Promise.all([fetch('/api/agents').then(r => r.json()), fetch('/api/groups').then(r => r.json()).catch(() => [])]);
   agents = al; groups = gl;
@@ -684,7 +694,9 @@ function addMsg(who, text, at, meta = {}) {
   // v1.9 rev B: long scheduled / handoff instructions show short (first line + a few words); tap to see all
   const long = who === 'me' && /^(⏰|📨|👁)/.test(text) && text.length > 160;
   const shortText = long ? text.split('\n')[0] + '\n' + text.split('\n').slice(1).join(' ').slice(0, 90) + '…' : text;
-  const d = bubble(who, shortText);
+  const schedIds = who === 'bot' ? [...String(text).matchAll(/⏰ Schedule saved \[s:([a-z0-9]+)\]/g)].map(m => m[1]) : [];
+  if (schedIds.length) { text = text.replace(/ \[s:[a-z0-9]+\]/g, ''); }
+  const d = bubble(who, schedIds.length ? text : shortText);
   if (long) { const more = el('button', 'more', '▸ Poora dekhein'); more.type = 'button'; more.onclick = () => { const open = more.textContent.startsWith('▸'); d.querySelector('.txt').innerHTML = md(open ? text : shortText); more.textContent = open ? '▾ Chhota karein' : '▸ Poora dekhein'; }; d.innerHTML = ''; const t = el('div', 'txt'); t.innerHTML = md(shortText); d.append(t, more); }
   if (who === 'bot' && /^⚠️ (Could not run|Finished without a reply)/.test(text)) { // v2.0: ↻ run the task before it again
     const prev = [...$('msgs').querySelectorAll('.m.me')].pop();
@@ -692,6 +704,7 @@ function addMsg(who, text, at, meta = {}) {
   }
   if (who === 'me') d.dataset.full = text;
   d.querySelectorAll('pre.cb').forEach(pre => { const raw = pre.textContent; const b = el('button', 'cbcopy', '📋 Copy'); b.type = 'button'; b.onclick = () => copyText(raw, b); pre.append(b); });
+  for (const id of schedIds) { const c = el('div', 'scard'); c.append(el('b', null, '⏰ Schedule saved')); schedButtons(id, c, true); d.append(c); } // v2.7
   if (who === 'bot' && meta.idx !== undefined) d.append(msgActions(d, text, meta));
   if (at) d.append(el('span', 'at', at)); $('msgs').append(d); scroll(); return d;
 }
@@ -799,6 +812,7 @@ async function send(text, opts = {}) {
   } catch (e) { if (here()) $('msgs').append(el('div', 'err', e.message)); }
   busyAgents.delete(agent); work.remove(); markSide();
   if (V.auto && said.length && here()) speakText(said.join('\n'));
+  if (said.some(t => /⏰ Schedule saved/.test(t))) loadSched().catch(() => {}); // v2.7 new schedule shows in the side panel
   if (here()) { syncSend(); loadChat(); }
 }
 function markSide() { loadAgentsQuiet(); }
@@ -1047,9 +1061,46 @@ $('copyAddr').onclick = async () => {
 // ---------- Automation: schedules + settings ----------
 const DAYN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const post = (u, b) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Failed'); return d; });
-function daysText(d) { if (!d || !d.length || d.length === 7) return 'Every day'; if (d.join() === '1,2,3,4,5') return 'Mon–Fri'; return d.map(x => DAYN[x]).join(' '); }
+function daysText(d) { if (!d || !d.length || d.length === 7) return 'Every day'; const x = [...d].sort((a, b) => a - b); if (x.length >= 3 && x.every((v, i) => !i || v === x[i - 1] + 1)) return DAYN[x[0]] + '–' + DAYN[x[x.length - 1]]; return x.map(v => DAYN[v] || '?').join(' '); }
+// ---------- v2.7 schedule card + side panel (edit / pause / delete / run) ----------
+const schedPost = b => post('/api/schedules', b);
+async function schedButtons(id, box, inChat) {
+  const all = await (await fetch('/api/schedules')).json().catch(() => []); const sc = all.find(x => x.id === id);
+  const row = el('div', 'sbtns');
+  if (!sc) { box.append(el('span', 'note', 'Deleted.')); return; }
+  const b = (t, f, cls) => { const k = el('button', cls || null, t); k.type = 'button'; k.onclick = f; row.append(k); return k; };
+  b('✏️ Edit', () => schedEditor(sc, box));
+  b(sc.enabled ? '⏸ Pause' : '▶ Turn on', () => schedPost({ action: 'toggle', id }).then(() => refreshSched(box, id, inChat)));
+  b('🗑 Delete', e => { const k = e.target; if (k.dataset.sure) schedPost({ action: 'delete', id }).then(() => refreshSched(box, id, inChat)); else { k.dataset.sure = 1; k.textContent = 'Sure? tap again'; } }, 'del');
+  b('▶ Run now', e => schedPost({ action: 'run', id }).then(() => { e.target.textContent = 'Started ✓'; }).catch(er => { e.target.textContent = er.message; }));
+  box.append(row);
+}
+function refreshSched(box, id, inChat) { loadSched().catch(() => {}); if (inChat) { box.querySelectorAll('.sbtns,.sedit,.note').forEach(x => x.remove()); schedButtons(id, box, true); } }
+function schedEditor(sc, box) {
+  if (box.querySelector('.sedit')) { box.querySelector('.sedit').remove(); return; }
+  const f = el('div', 'sedit'); const tm = el('input'); tm.value = sc.times.join(', ');
+  const dd = el('div', 'dd'); DAYN.forEach((n, i) => { const l = el('label'); const c = el('input'); c.type = 'checkbox'; c.value = i; c.checked = !sc.days.length || sc.days.includes(i); l.append(c, document.createTextNode(' ' + n)); dd.append(l); });
+  const tk = el('textarea'); tk.rows = 3; tk.value = sc.task;
+  const bt = el('div', 'sbtns'); const sv = el('button', null, 'Save'); sv.type = 'button'; const cn = el('button', null, 'Cancel'); cn.type = 'button'; const msg = el('span', 'note');
+  sv.onclick = () => { const days = [...dd.querySelectorAll('input:checked')].map(x => Number(x.value)); schedPost({ action: 'update', id: sc.id, times: tm.value, task: tk.value, days: days.length === 7 ? [] : days }).then(() => { msg.textContent = 'Saved ✓'; loadSched().catch(() => {}); setTimeout(() => f.remove(), 600); }).catch(e => { msg.textContent = e.message; }); };
+  cn.onclick = () => f.remove(); bt.append(sv, cn, msg);
+  f.append(el('span', null, 'Times (IST)'), tm, dd, el('span', null, 'Task'), tk, bt); box.append(f);
+}
+function renderBotSched(list) {
+  const box = $('botSched'); if (!box) return; box.replaceChildren();
+  const a = agents.find(x => x.id === cur) || groups.find(g => g.id === cur); $('botSchedH').textContent = (a ? a.name : 'This bot') + ' · schedules';
+  const mine = list.filter(x => x.agent === cur);
+  if (!mine.length) box.append(el('div', 'note', 'None. Tell the bot e.g. "roz 9:30 par …" and it makes one.'));
+  for (const sc of mine) {
+    const r = el('div', 'bs' + (sc.enabled ? '' : ' off')); const t = el('div', 't');
+    t.append(el('b', null, sc.times.join(' ')), el('span', null, sc.enabled ? (sc.days.length ? daysText(sc.days) : 'Daily') : 'Paused'));
+    r.append(t, el('small', null, sc.task)); schedButtons(sc.id, r, false); box.append(r);
+  }
+  const nb = el('div', 'sbtns'); const add = el('button', null, '+ New schedule'); add.type = 'button'; add.onclick = () => openAuto('sched'); nb.append(add); box.append(nb);
+}
 async function loadSched() {
   const list = await (await fetch('/api/schedules')).json();
+  renderBotSched(list);
   const box = $('schedList'); box.replaceChildren(); const pan = $('schedPanel'); pan.replaceChildren();
   if (!list.length) { box.append(el('div', 'note', 'No schedules yet. Add one below.')); pan.append(el('div', 'note', 'None yet')); }
   const perBot = new Map(); // v1.9 rev C: one compact line per bot, all its times together
