@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.7 rev A (16-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.7 rev B (17-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -239,6 +239,14 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
   .asearch{flex:none;width:130px;margin:0 4px 0 0}
   .agent.sub{margin-left:0;width:auto;border-left:0;background:rgba(36,66,122,.07);border-radius:8px}
   .side .rt span:first-child{display:none}
+  /* v2.7 rev B: phone typing box gets the full width (buttons go below it) and grows as you type */
+  .composer{flex-wrap:wrap;padding:8px 10px;gap:6px}
+  .composer textarea{order:-1;flex:1 1 100%;font-size:16px;min-height:52px;max-height:40vh}
+  .composer .clip,.composer .mic{width:40px;height:38px}
+  .composer .send{margin-left:auto;height:38px;padding:0 20px}
+  .composer .stop{height:38px}
+  .vbar{padding:4px 10px;gap:6px;font-size:12px;flex-wrap:nowrap;overflow-x:auto}
+  .vbar span{display:none}
   .titlebar .dot{display:none}
   .m{max-width:92%}
 }
@@ -877,9 +885,12 @@ chatEl.addEventListener('drop', e => { e.preventDefault(); chatEl.classList.remo
 $('form').onsubmit = e => {
   e.preventDefault(); let v = $('inp').value.trim();
   if (attached.length) { v = (v || 'Maine ye files upload ki hain. Padh kar short summary dijiye.') + '\n\nUploaded files:\n' + attached.map(a => '- ' + a.path).join('\n'); attached = []; showFiles(); }
-  $('inp').value = ''; send(v);
+  $('inp').value = ''; growInp(); send(v);
 };
 $('stopBtn').onclick = () => fetch('/api/stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: cur }) }).catch(() => {});
+// v2.7 rev B: the typing box grows with the text (up to 40% of the screen on phone, 140px on desktop)
+const growInp = () => { const t = $('inp'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight + 2, window.innerWidth <= 900 ? window.innerHeight * 0.4 : 140) + 'px'; };
+$('inp').addEventListener('input', growInp);
 $('inp').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('form').requestSubmit(); } };
 function setTone(t) { tone = t; $('fun').classList.toggle('on', t === 'fun'); $('pro').classList.toggle('on', t === 'pro'); try { localStorage.setItem('tone', t); } catch {} }
 $('fun').onclick = () => setTone('fun'); $('pro').onclick = () => setTone('pro'); setTone(tone);
@@ -1013,7 +1024,7 @@ $('liveClose').onclick = () => { closeLive(); liveAuto = false; try { localStora
     rec.onresult = e => {
       let fin = '', mid = '';
       for (let i = 0; i < e.results.length; i++) (e.results[i].isFinal ? (fin += e.results[i][0].transcript) : (mid += e.results[i][0].transcript));
-      $('inp').value = base + fin + mid;
+      $('inp').value = base + fin + mid; growInp();
     };
     rec.onerror = e => { $('inp').placeholder = e.error === 'not-allowed' ? 'Allow microphone for this site (browser settings), then try again.' : 'Voice error: ' + e.error; };
     rec.onend = () => { btn.classList.remove('rec'); rec = null; $('inp').focus(); };
