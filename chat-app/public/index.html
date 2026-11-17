@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.8 rev A (17-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.8 rev B (17-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -1275,8 +1275,11 @@ async function loadSettings() {
   $('zohoDrafts').checked = s.zohoDrafts !== false;
   loadGroupList();
   { // v2.8 guests
-    $('ownerNote').textContent = s.owner ? 'Your Tailscale login: ' + s.owner + ' (only this login sees everything).' : '⚠️ Tailscale login not detected yet: guests stay off until it is. Do not share the Mac mini yet.';
+    $('ownerNote').replaceChildren(document.createTextNode(s.owner ? 'Owner (sees everything): ' + s.owner : '⚠️ Owner login not set: with guests added, everyone else is refused. Set it below from the Mac mini.'));
     $('ownerNote').style.color = s.owner ? '' : 'var(--bad)';
+    if ((s.seen || []).length) $('ownerNote').append(el('div', 'note', 'Logins that opened the app recently: ' + s.seen.join(', ')));
+    if (!s.owner || !s.detected) { const i = el('input'); i.type = 'text'; i.placeholder = 'your Tailscale login email'; i.value = s.owner || ''; const bt = el('button', 'btn', 'Set owner'); bt.type = 'button'; const m = el('span', 'msg');
+      bt.onclick = () => post('/api/settings', { action: 'setOwner', login: i.value }).then(() => { m.textContent = 'Saved ✓'; loadSettings(); }).catch(e => { m.textContent = e.message; }); $('ownerNote').append(el('div'), i, bt, m); }
     const gb = $('gBots'); gb.replaceChildren(); for (const a of agents) { const l = el('label'); const c = el('input'); c.type = 'checkbox'; c.value = a.id; l.append(c, document.createTextNode(' ' + a.name)); gb.append(l); }
     const gl = $('guestList'); gl.replaceChildren(); if (!(s.guests || []).length) gl.append(el('div', 'note', 'No guests.'));
     for (const g of s.guests || []) {

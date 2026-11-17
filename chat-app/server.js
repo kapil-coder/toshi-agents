@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v2.8 rev A';
+const VERSION = 'v2.8 rev B';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -44,6 +44,7 @@ execFile('claude', ['--version'], (e, out) => { claudeVersion = e ? 'not found' 
 // If the owner login cannot be read, everyone remote is treated as owner (old behaviour) and guests stay off.
 const TS_BINS = ['/usr/local/bin/tailscale', '/opt/homebrew/bin/tailscale', '/Applications/Tailscale.app/Contents/MacOS/Tailscale', 'tailscale'];
 let tsBin = null, ownerLogin = '';
+const lastLogins = new Map(); // login -> last seen (for Settings: who opened the app)
 const whoCache = new Map();
 function tsRun(args, cb) {
   const tryBin = i => {
@@ -67,10 +68,12 @@ function identify(req) {
     if (process.env.TOSHI_TEST_LOGIN !== undefined && req.headers['x-test-login'] !== undefined) return decide(String(req.headers['x-test-login']).toLowerCase()); // smoke test only
     if (loop && !xff && !hdr) return resolve({ role: 'owner' });
     function decide(login) {
-      const own = process.env.TOSHI_TEST_LOGIN || ownerLogin;
-      if (!own) return resolve({ role: 'owner', login, unsure: true });
-      if (login && login === own) return resolve({ role: 'owner', login });
+      // v2.8 rev B: guest check FIRST, and when unsure with guests set up, refuse (never "owner by default")
+      lastLogins.set(login || '(unknown)', Date.now());
       const g = login && activeGuest(login); if (g) return resolve({ role: 'guest', login, guest: g });
+      const own = process.env.TOSHI_TEST_LOGIN || getSettings().ownerLogin || ownerLogin;
+      if (login && own && login === own) return resolve({ role: 'owner', login });
+      if (!own && !(getSettings().guests || []).length) return resolve({ role: 'owner', login, unsure: true }); // no guests at all: old behaviour
       resolve({ role: 'none', login });
     }
     if (hdr) return decide(hdr);
@@ -84,7 +87,7 @@ async function guestGate(req, url, g) {
   const ok = id => (g.bots || []).includes(id);
   const P = url.pathname, M = req.method;
   if (M === 'GET' && (P === '/' || P === '/index.html' || P === '/manifest.json' || /^\/(icon\.svg|icon-180\.png|icon-512\.png|favicon\.ico)$/.test(P))) return true;
-  if (M === 'GET' && ['/api/agents', '/api/groups', '/api/status', '/api/schedules'].includes(P)) return true;
+  if (M === 'GET' && ['/api/agents', '/api/groups', '/api/status', '/api/schedules', '/api/whoami'].includes(P)) return true;
   if (M === 'GET' && (P === '/api/chat' || P === '/api/avatar')) return ok(url.searchParams.get('agent') || '');
   if (M === 'POST' && P === '/api/upload') return ok(url.searchParams.get('agent') || '');
   if (M === 'POST' && ['/api/chat', '/api/stop', '/api/queue', '/api/seen', '/api/feedback'].includes(P)) { req._body = await readBody(req); return ok(String(req._body.agent || '')); }
@@ -1015,6 +1018,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (who.role === 'guest' && !(await guestGate(req, url, who.guest))) return json(res, 403, { error: 'Not available for guests.' });
     const G = who.role === 'guest' ? who.guest : null;
+    if (req.method === 'GET' && url.pathname === '/api/whoami') return json(res, 200, { role: who.role, login: who.login || '', name: G ? G.name : '', owner: getSettings().ownerLogin || ownerLogin || '' });
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0', Pragma: 'no-cache', Expires: '0' });
       let html = fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8').replace('__APP_VERSION__', VERSION);
@@ -1317,7 +1321,7 @@ const server = http.createServer(async (req, res) => {
       }
     }
     if (url.pathname === '/api/settings') {
-      if (req.method === 'GET') return json(res, 200, { ...getSettings(), owner: ownerLogin, folders: getFolders(), shared: Object.fromEntries(listAgents().map(a => [a.id, usesSharedBrowser(a.id)])) });
+      if (req.method === 'GET') return json(res, 200, { ...getSettings(), owner: getSettings().ownerLogin || ownerLogin, detected: ownerLogin, seen: [...lastLogins.keys()].slice(-10), folders: getFolders(), shared: Object.fromEntries(listAgents().map(a => [a.id, usesSharedBrowser(a.id)])) });
       if (req.method === 'POST') {
         const b = await readBody(req); const s = getSettings();
         if (b.action === 'notify') {
@@ -1371,6 +1375,13 @@ const server = http.createServer(async (req, res) => {
             days: Array.isArray(c.days) ? c.days.map(Number).filter(d => d >= 0 && d <= 6) : WATCH_DEF.days, gmail: !!c.gmail, whatsapp: !!c.whatsapp, summary: tm(c.summary) || '',
             lastRun: prev.lastRun || 0, lastSummary: prev.lastSummary || '' };
           s.watch = s.watch || {}; s.watch[b.id] = w; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
+        }
+        if (b.action === 'setOwner') { // v2.8 rev B: only from the Mac mini itself (http://localhost:3737), or to confirm the detected login
+          const login = String(b.login || '').trim().toLowerCase();
+          const local = !req.headers['x-forwarded-for'] && !req.headers['tailscale-user-login'] && /^(::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(req.socket.remoteAddress || '');
+          if (!local) return json(res, 403, { error: 'Open http://localhost:3737 on the Mac mini to set the owner login.' });
+          if (!/^[^@\s]+@[^@\s]+$/.test(login)) return json(res, 400, { error: 'Write your Tailscale login email.' });
+          s.ownerLogin = login; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
         }
         if (b.action === 'guestAdd') { // v2.8
           const login = String(b.login || '').trim().toLowerCase(), name = String(b.name || '').replace(/[<>*\n\r]/g, '').trim().slice(0, 40);

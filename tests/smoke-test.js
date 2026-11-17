@@ -145,6 +145,8 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     const gX = await p.evaluate(h => fetch('/api/agents', { headers: h }).then(r => r.status), H('stranger@test.in'));
     const gO = await p.evaluate(h => fetch('/api/settings', { headers: h }).then(r => r.status), H('kapil@test.in'));
     check(gS === 403 && gC === 403 && gX === 403 && gO === 200, 'Guest blocked from Settings / other bots; stranger blocked; owner OK');
+    const wi = await p.evaluate(h => fetch('/api/whoami', { headers: h }).then(r => r.json()), H('ritvik@test.in'));
+    check(wi.role === 'guest' && wi.name === 'Ritvik', 'whoami shows guest');
     const gctx = await b.newContext({ viewport: { width: 1200, height: 900 }, extraHTTPHeaders: { 'x-test-login': 'ritvik@test.in' } }); const gp = await gctx.newPage();
     await gp.goto(`http://localhost:${PORT}`); await gp.waitForTimeout(1200);
     check((await gp.locator('#side .agent[data-id]').count()) === 1 && !(await gp.isVisible('#sideSet')) && !(await gp.isVisible('#liveBtn')) && (await gp.textContent('body')).includes('Guest: Ritvik'), 'Guest screen: one bot, no Settings / Live');
