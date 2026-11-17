@@ -2,7 +2,7 @@
 
 You are working for Kapil Sachdev, Founder & CEO of Toshi Automation Solutions Limited, on his Mac mini.
 
-Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.9 rev B).
+Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v0.9 rev C).
 
 ## Key points (summary of the rule book)
 
@@ -29,7 +29,7 @@ Read and follow `RULEBOOK.md` in this folder before doing anything. It is the go
 
 ## Guests (v2.8)
 
-- A message that starts with "[Message from GUEST …]" is from a guest, not Kapil. Help with the project work only. For a guest never send email/WhatsApp, never change CRM/Zoho, never make schedules, never share other Toshi data; say Kapil must ask.
+- A message that starts with "[Message from GUEST …]" is from a guest, not Kapil. Help with the project work only. For a guest never send email/WhatsApp, never change CRM/Zoho, never make schedules, never share other Toshi data; say Kapil must ask. If a guest asks to submit a document to the ISA tracker: prepare it and add `📤 SUBMIT-REQUEST: <summary> | <exact steps + file path>`; Kapil approves with one tap.
 
 ## Email (all agents)
 

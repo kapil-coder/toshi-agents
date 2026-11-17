@@ -155,6 +155,18 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check(lc && lc.by === 'Ritvik' && lc.text === 'guest hello', 'Guest message saved with their name');
     const lbot = await p.evaluate(() => fetch('/api/chat?agent=linkedin-desk').then(r => r.json()).then(d => d.messages.filter(m => m.who === 'bot').pop()));
     check(lbot && lbot.text === 'guestmode yes', 'Guest run: no connectors, nothing pre-approved');
+    // v2.9 1-tap submit: guest asks, owner approves
+    await gp.fill('#inp', 'submittest'); await gp.click('#sendBtn'); await gp.waitForTimeout(1800); await gp.evaluate(() => loadChat()); await gp.waitForTimeout(500);
+    check((await gp.textContent('#msgs')).includes('Waiting for Kapil') && (await gp.locator('#msgs .sreq .okb').count()) === 0, 'Guest sees submit request waiting (no approve button)');
+    const rq = await p.evaluate(() => fetch('/api/chat?agent=linkedin-desk').then(r => r.json()).then(d => d.requests.pop()));
+    check(rq && rq.by === 'Ritvik' && rq.status === 'waiting', 'Submit request saved for Kapil');
+    const gq = await gp.evaluate(id => fetch('/api/submitreq', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: 'linkedin-desk', id, action: 'approve' }) }).then(r => r.status), rq.id);
+    check(gq === 403, 'Guest cannot approve');
+    await p.evaluate(() => selectChat('linkedin-desk')); await p.waitForTimeout(1200);
+    await p.locator('#msgs .sreq .okb').last().click(); await p.waitForTimeout(2000);
+    const rq2 = await p.evaluate(id => fetch('/api/chat?agent=linkedin-desk').then(r => r.json()).then(d => ({ r: d.requests.find(x => x.id === id), last: d.messages.filter(m => m.who === 'me').pop().text })), rq.id);
+    check(rq2.r.status === 'approved' && rq2.last.includes('Kapil approved submit'), 'Kapil ✅ starts the submit run');
+    await p.evaluate(() => selectChat('mr-c')); await p.waitForTimeout(600);
     await gctx.close();
     // v1.9 rev B: long scheduled message shows short
     await p.evaluate(() => addMsg('me', '⏰ Scheduled 19:00 IST\n' + 'LinkedIn evening desk steps '.repeat(20), 'x'));

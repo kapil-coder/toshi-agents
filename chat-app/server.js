@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v2.8 rev B';
+const VERSION = 'v2.9 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -193,7 +193,7 @@ function runClaude(agent, message, opts, onEvent) {
       'If no member fits or the request is unclear, ask Kapil briefly. Do not do a member\'s work yourself. If the group is empty, tell Kapil to add bots via Settings > My agents > Group.';
   }
   args.push('--append-system-prompt', tone + ' Your name in the Toshi Bot app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.' + groupNote + memNote);
-  const guestNote = opts.guest ? '[Message from GUEST ' + opts.guest + ' (not Kapil). Help only with this bot\'s project work. For a guest never send email or WhatsApp, never change CRM/Zoho, never run schedules, never share other Toshi data. Anything like that: say Kapil must ask.]\n' : '';
+  const guestNote = opts.guest ? '[Message from GUEST ' + opts.guest + ' (not Kapil). Help only with this bot\'s project work. For a guest never send email or WhatsApp, never change CRM/Zoho, never run schedules, never share other Toshi data. Anything like that: say Kapil must ask. If the guest asks to submit / upload a document to the ISA tracker or any outside portal: do NOT submit; prepare it (find the exact file in iCloud, name, revision, MDL number, fields to fill) and add one line "📤 SUBMIT-REQUEST: <short summary> | <exact instructions for the submit run, incl. full file path and what to fill>". Kapil approves it with one tap.]\n' : '';
   args.push('--', freshNote + guestNote + message);
 
   // Tools Kapil approved with Haan for this run: the guard hook allows exactly these
@@ -221,7 +221,7 @@ function runClaude(agent, message, opts, onEvent) {
       if (ev.type === 'system' && ev.subtype === 'init' && Array.isArray(ev.tools)) learnConnectors(ev.tools);
       if (ev.type === 'assistant' && ev.message && Array.isArray(ev.message.content)) {
         for (const c of ev.message.content) {
-          if (c.type === 'text' && c.text.trim()) { const v = saveScheduleLines(agent, saveMemoryLines(agent, c.text)); if (v.trim()) { finalText.push(v); onEvent({ t: 'text', v }); } }
+          if (c.type === 'text' && c.text.trim()) { const v = saveSubmitLines(agent, saveScheduleLines(agent, saveMemoryLines(agent, c.text)), opts.guest); if (v.trim()) { finalText.push(v); onEvent({ t: 'text', v }); } }
           if (c.type === 'tool_use') { onEvent({ t: 'tool', v: toolLabel(c.name) }); if (isSendCall(agent, c.name, c.input)) logSend(agent, c.name, c.input); }
         }
       }
@@ -376,6 +376,18 @@ function saveScheduleLines(agent, text) {
     list.push({ id, agent, times, days, task: task.slice(0, 4000), enabled: true, created: stamp(), last: {}, byBot: true }); saveSchedules(list);
     const dn = days.length ? days.map(d => ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d]).join(' ') : 'Daily';
     return '⏰ Schedule saved [s:' + id + ']: ' + times.join(', ') + ' IST · ' + dn + ' · ' + task.slice(0, 200);
+  });
+}
+
+// ---------- v2.9 1-tap submit: a guest asks, the bot prepares, Kapil taps ✅, the bot submits (owner run, with browser) ----------
+function saveSubmitLines(agent, text, by) {
+  return String(text).replace(/^[ \t>*-]*(?:📤\s*)?SUBMIT-REQUEST\s*:\s*(.+)$/gmi, (m, body) => {
+    const [summary, ...rest] = body.split('|').map(x => x.trim()); const task = rest.join(' | ').trim();
+    if (!summary || !task || !validAgent(agent)) return m;
+    const c = loadChat(agent), id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    c.requests = (c.requests || []).slice(-30); c.requests.push({ id, summary: summary.slice(0, 300), task: task.slice(0, 3000), by: by || 'Kapil', at: stamp(), status: 'waiting' }); saveChat(agent, c);
+    notify('Toshi Bot: ' + (by || 'Someone') + ' wants to submit', summary.slice(0, 120) + ' — open ' + agentName(agent) + ' and tap ✅ Submit.');
+    return '📤 Submit request [r:' + id + ']: ' + summary + ' — waiting for Kapil\'s ✅';
   });
 }
 
@@ -1074,7 +1086,21 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/chat') {
       const id = url.searchParams.get('agent') || '';
       if (!validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
-      const c = loadChat(id); return json(res, 200, { messages: c.messages, pending: c.pending || [], allow: c.allow || [], busy: running.has(id), queue: c.queue || [] });
+      const c = loadChat(id); return json(res, 200, { messages: c.messages, pending: c.pending || [], allow: c.allow || [], busy: running.has(id), queue: c.queue || [], requests: c.requests || [] });
+    }
+    if (req.method === 'POST' && url.pathname === '/api/submitreq') { // v2.9 owner only (guests are refused by the gate)
+      const b = await readBody(req); if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });
+      const c = loadChat(b.agent), r = (c.requests || []).find(x => x.id === b.id);
+      if (!r) return json(res, 404, { error: 'Request not found' });
+      if (r.status !== 'waiting') return json(res, 409, { error: 'Already ' + r.status });
+      if (b.action === 'reject') { r.status = 'rejected'; r.done = stamp(); saveChat(b.agent, c); return json(res, 200, { ok: true }); }
+      if (b.action !== 'approve') return json(res, 400, { error: 'Unknown action' });
+      if (running.has(b.agent)) return json(res, 409, { error: 'The bot is busy. Try again in a minute.' });
+      r.status = 'approved'; r.done = stamp(); saveChat(b.agent, c);
+      startRun(b.agent, 'Kapil approved this submission with one tap (requested by ' + r.by + '): ' + r.summary + '\nDo it now: ' + r.task +
+        '\nUse the browser (ISA tracker link is in your memory / charter). Upload exactly that file, submit, then reply with the tracker reference number, file name, revision and time (IST). If login, upload or anything fails: stop, do not retry blindly, and say why.',
+        { tone: 'pro', allowOnce: [] }, () => {}, { scheduled: true, time: 'submit', label: '✅ Kapil approved submit' });
+      return json(res, 200, { ok: true });
     }
     if (req.method === 'POST' && url.pathname === '/api/queue') {
       const qb = await readBody(req); if (G) qb.by = G.name; const r = queueAction(qb);

@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.8 rev B (17-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.9 rev A (17-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,8 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.m .sreq{border-color:#e0a92e;background:rgba(224,169,46,.09)}
+.sbtns .okb{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;padding:3px 12px}
 body.guest #liveBtn,body.guest #watch,body.guest #pinBtn,body.guest .panel,body.guest #livePanel,body.guest #sideAdd,body.guest #sideSet,body.guest #asearch,body.guest .side h4{display:none!important}
 body.guest .app{grid-template-columns:240px minmax(0,1fr)}
 @media (max-width:900px){body.guest .app{grid-template-columns:minmax(0,1fr)}}
@@ -694,6 +696,7 @@ const qSig = d => (d.queue || []).map(x => x.id + x.text.length).join(',');
 async function loadChat(pre) {
   const d = pre || await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json();
   serverBusy = !!d.busy && !busyAgents.has(cur);
+  reqCache = Object.fromEntries((d.requests || []).map(r => [r.id, r]));
   shown = { agent: cur, count: d.messages.length, pending: (d.pending || []).length, busy: !!d.busy, q: qSig(d) };
   showQueue(d.queue, (d.pending || []).length);
   fetch('/api/seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: cur }) }).catch(() => {});
@@ -722,6 +725,8 @@ function addMsg(who, text, at, meta = {}) {
   // v1.9 rev B: long scheduled / handoff instructions show short (first line + a few words); tap to see all
   const long = who === 'me' && /^(⏰|📨|👁)/.test(text) && text.length > 160;
   const shortText = long ? text.split('\n')[0] + '\n' + text.split('\n').slice(1).join(' ').slice(0, 90) + '…' : text;
+  const reqIds = who === 'bot' ? [...String(text).matchAll(/📤 Submit request \[r:([a-z0-9]+)\]/g)].map(m => m[1]) : [];
+  if (reqIds.length) text = text.replace(/ \[r:[a-z0-9]+\]/g, '');
   const schedIds = who === 'bot' ? [...String(text).matchAll(/⏰ Schedule saved \[s:([a-z0-9]+)\]/g)].map(m => m[1]) : [];
   if (schedIds.length) { text = text.replace(/ \[s:[a-z0-9]+\]/g, ''); }
   const d = bubble(who, schedIds.length ? text : shortText);
@@ -733,6 +738,7 @@ function addMsg(who, text, at, meta = {}) {
   if (who === 'me') d.dataset.full = text;
   if (who === 'me' && (meta.by || GUEST)) { d.classList.add('byg'); const l = el('span', 'byl', meta.by || GUEST.name); d.prepend(l); } // v2.8 who wrote it
   d.querySelectorAll('pre.cb').forEach(pre => { const raw = pre.textContent; const b = el('button', 'cbcopy', '📋 Copy'); b.type = 'button'; b.onclick = () => copyText(raw, b); pre.append(b); });
+  for (const id of reqIds) d.append(submitCard(id)); // v2.9
   for (const id of schedIds) { const c = el('div', 'scard'); c.append(el('b', null, '⏰ Schedule saved')); schedButtons(id, c, true); d.append(c); } // v2.7
   if (who === 'bot' && meta.idx !== undefined) d.append(msgActions(d, text, meta));
   if (at) d.append(el('span', 'at', at)); $('msgs').append(d); scroll(); return d;
@@ -1100,6 +1106,22 @@ $('copyAddr').onclick = async () => {
 const DAYN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const post = (u, b) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Failed'); return d; });
 function daysText(d) { if (!d || !d.length || d.length === 7) return 'Every day'; const x = [...d].sort((a, b) => a - b); if (x.length >= 3 && x.every((v, i) => !i || v === x[i - 1] + 1)) return DAYN[x[0]] + '–' + DAYN[x[x.length - 1]]; return x.map(v => DAYN[v] || '?').join(' '); }
+// ---------- v2.9 1-tap submit card ----------
+let reqCache = {};
+function submitCard(id) {
+  const c = el('div', 'scard sreq'); const r = reqCache[id];
+  if (!r) { c.append(el('span', 'note', 'Submit request')); return c; }
+  c.append(el('b', null, '📤 ' + r.summary), el('div', 'note', 'Asked by ' + r.by + ' · ' + r.at + (r.status !== 'waiting' ? ' · ' + (r.status === 'approved' ? '✅ approved ' : '✕ rejected ') + (r.done || '') : '')));
+  if (r.status === 'waiting') {
+    if (GUEST) c.append(el('div', 'note', '⏳ Waiting for Kapil\'s ✅'));
+    else {
+      const row = el('div', 'sbtns'); const ok = el('button', 'okb', '✅ Submit karo'); const no = el('button', 'del', '✕ Mana karo'); ok.type = no.type = 'button';
+      const act = a => post('/api/submitreq', { agent: cur, id, action: a }).then(() => { r.status = a === 'approve' ? 'approved' : 'rejected'; r.done = 'now'; c.replaceWith(submitCard(id)); if (a === 'approve') setTimeout(() => loadChat().catch(() => {}), 1500); }).catch(e => { row.append(el('span', 'note', ' ' + e.message)); });
+      ok.onclick = () => act('approve'); no.onclick = () => act('reject'); row.append(ok, no); c.append(row);
+    }
+  }
+  return c;
+}
 // ---------- v2.7 schedule card + side panel (edit / pause / delete / run) ----------
 const schedPost = b => post('/api/schedules', b);
 async function schedButtons(id, box, inChat) {
