@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.9 rev D (17-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.9 rev E (17-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,7 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.m.livep{opacity:.85;border-style:dashed}
 .m .sreq{border-color:#e0a92e;background:rgba(224,169,46,.09)}
 .sbtns .okb{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;padding:3px 12px}
 body.guest #liveBtn,body.guest #watch,body.guest #pinBtn,body.guest .panel,body.guest #livePanel,body.guest #sideAdd,body.guest #sideSet,body.guest #asearch,body.guest .side h4{display:none!important}
@@ -692,12 +693,13 @@ function showHeader() {
   $('inp').placeholder = 'Message ' + a.name + '…';
   $('pinBtn').textContent = a.pinned ? '⭐ Pinned' : '☆ Pin'; $('pinBtn').title = a.pinned ? 'Unpin' : 'Pin this bot to the top of the list';
 }
+const liveSig = d => d.live ? (d.live.texts || []).length + '|' + (d.live.tool || '') : '';
 const qSig = d => (d.queue || []).map(x => x.id + x.text.length).join(',');
 async function loadChat(pre) {
   const d = pre || await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json();
   serverBusy = !!d.busy && !busyAgents.has(cur);
   reqCache = Object.fromEntries((d.requests || []).map(r => [r.id, r]));
-  shown = { agent: cur, count: d.messages.length, pending: (d.pending || []).length, busy: !!d.busy, q: qSig(d) };
+  shown = { agent: cur, liveSig: liveSig(d), count: d.messages.length, pending: (d.pending || []).length, busy: !!d.busy, q: qSig(d) };
   showQueue(d.queue, (d.pending || []).length);
   fetch('/api/seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: cur }) }).catch(() => {});
   const m = $('msgs'); m.replaceChildren();
@@ -708,7 +710,8 @@ async function loadChat(pre) {
   d.messages.forEach((x, i) => addMsg(x.who, x.text, x.at, { idx: i, vote: x.vote, by: x.by }));
   if (d.pending && d.pending.length) addApproval(d.pending);
   $('allowList').textContent = d.allow.length ? d.allow.map(label).join(', ') : 'None yet';
-  if (isBusy()) m.append(el('div', 'tool', serverBusy ? 'Working (queued task or another device)… updates here automatically.' : 'Still working… the reply appears here when done. You can use other agents meanwhile.'));
+  if (serverBusy && d.live) { for (const t of d.live.texts || []) { const b = bubble('bot', t); b.classList.add('livep'); m.append(b); } } // v2.9 rev E: live progress for everyone
+  if (isBusy()) m.append(el('div', 'tool', serverBusy && d.live && d.live.tool ? 'Using ' + d.live.tool + '…' : serverBusy ? 'Working (queued task or another device)… updates here automatically.' : 'Still working… the reply appears here when done. You can use other agents meanwhile.'));
   syncSend(); scroll();
 }
 function label(t) { const m = String(t).match(/^mcp__(.+?)__(.+)$/); return m ? m[1].replace(/^claude_ai_/, '').replace(/_/g, ' ') + ': ' + m[2].replace(/_/g, ' ') : t; }
@@ -1003,7 +1006,7 @@ async function poll() {
   try {
     const d = await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json();
     if (shown.agent !== cur) return;
-    if (d.messages.length !== shown.count || (d.pending || []).length !== shown.pending || !!d.busy !== shown.busy || qSig(d) !== shown.q) loadChat(d);
+    if (d.messages.length !== shown.count || (d.pending || []).length !== shown.pending || !!d.busy !== shown.busy || qSig(d) !== shown.q || liveSig(d) !== shown.liveSig) loadChat(d);
     loadAgentsQuiet();
   } catch {}
 }

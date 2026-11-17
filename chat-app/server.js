@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v2.9 rev D';
+const VERSION = 'v2.9 rev E';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -22,6 +22,7 @@ const readJSON = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8'))
 
 const SEND_RE = /send|reply|forward|trash|delete|spam|share_file|create|update|upsert|post|remove|approve|purchase|merge/i;
 const running = new Map(); // agent -> child process
+const liveRuns = new Map(); // agent -> { texts, tool } of the run in progress (v2.9 rev E)
 // v1.0 rev C (Kapil 10-11-2026): all bots share ONE logged-in browser (Google, LinkedIn) unless set to "Own browser".
 // WhatsApp-type bots keep their own browser by default (their WhatsApp Web login lives there).
 const SHARED_BROWSER = { has: agent => usesSharedBrowser(agent) };
@@ -210,6 +211,7 @@ function runClaude(agent, message, opts, onEvent) {
   if (fs.existsSync(ICLOUD)) fs.mkdirSync(path.join(ICLOUD, agent === 'mr-c' || isGroup(agent) ? 'shared' : agent, 'work'), { recursive: true });
   const child = spawn('claude', args, { cwd: PROJECT, env, stdio: ['ignore', 'pipe', 'pipe'] }); // v1.9 rev E: no stdin (saves a 3 s wait per run)
   running.set(agent, child);
+  const live = { texts: [], tool: '', by: opts.guest || '' }; liveRuns.set(agent, live); // v2.9 rev E: progress everyone can see
   let buf = '', finalText = [], sessionId = chat.sessionId, denials = [], errText = '';
   child.stdout.on('data', d => {
     buf += d; let i;
@@ -221,8 +223,8 @@ function runClaude(agent, message, opts, onEvent) {
       if (ev.type === 'system' && ev.subtype === 'init' && Array.isArray(ev.tools)) learnConnectors(ev.tools);
       if (ev.type === 'assistant' && ev.message && Array.isArray(ev.message.content)) {
         for (const c of ev.message.content) {
-          if (c.type === 'text' && c.text.trim()) { const v = saveSubmitLines(agent, saveScheduleLines(agent, saveMemoryLines(agent, c.text)), opts.guest); if (v.trim()) { finalText.push(v); onEvent({ t: 'text', v }); } }
-          if (c.type === 'tool_use') { onEvent({ t: 'tool', v: toolLabel(c.name) }); if (isSendCall(agent, c.name, c.input)) logSend(agent, c.name, c.input); }
+          if (c.type === 'text' && c.text.trim()) { const v = saveSubmitLines(agent, saveScheduleLines(agent, saveMemoryLines(agent, c.text)), opts.guest); if (v.trim()) { finalText.push(v); live.texts.push(v.slice(0, 1500)); if (live.texts.length > 40) live.texts.shift(); onEvent({ t: 'text', v }); } }
+          if (c.type === 'tool_use') { live.tool = toolLabel(c.name); onEvent({ t: 'tool', v: toolLabel(c.name) }); if (isSendCall(agent, c.name, c.input)) logSend(agent, c.name, c.input); }
         }
       }
       if (ev.type === 'result') {
@@ -235,7 +237,7 @@ function runClaude(agent, message, opts, onEvent) {
   child.stderr.on('data', d => { errText += d; });
   child.on('error', e => { errText = 'Could not start Claude Code: ' + e.message; });
   child.on('close', code => {
-    running.delete(agent);
+    running.delete(agent); if (liveRuns.get(agent) === live) liveRuns.delete(agent);
     // v1.9 rev E: the saved session is gone (Claude cannot find it) -> start a fresh session with recent context and retry once
     if (code !== 0 && !finalText.length && /No conversation found with session ID|--resume requires a valid session/i.test(errText) && !opts.freshRetry) {
       const cc = loadChat(agent); cc.sessionId = null; cc.sessionRuns = 0; saveChat(agent, cc);
@@ -1086,7 +1088,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/chat') {
       const id = url.searchParams.get('agent') || '';
       if (!validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
-      const c = loadChat(id); return json(res, 200, { messages: c.messages, pending: c.pending || [], allow: c.allow || [], busy: running.has(id), queue: c.queue || [], requests: c.requests || [] });
+      const c = loadChat(id); return json(res, 200, { messages: c.messages, pending: c.pending || [], allow: c.allow || [], busy: running.has(id), queue: c.queue || [], requests: c.requests || [], live: running.has(id) ? liveRuns.get(id) || null : null });
     }
     if (req.method === 'POST' && url.pathname === '/api/submitreq') { // v2.9 owner only (guests are refused by the gate)
       const b = await readBody(req); if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });

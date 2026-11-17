@@ -160,6 +160,11 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check(lc && lc.by === 'Ritvik' && lc.text === 'guest hello', 'Guest message saved with their name');
     const lbot = await p.evaluate(() => fetch('/api/chat?agent=linkedin-desk').then(r => r.json()).then(d => d.messages.filter(m => m.who === 'bot').pop()));
     check(lbot && lbot.text === 'guestmode yes', 'Guest run: no connectors, nothing pre-approved');
+    // v2.9 rev E: the guest sees live progress of a task Kapil started
+    p.evaluate(() => fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: 'linkedin-desk', message: 'slowprogress' }) }).then(r => r.text()));
+    await gp.waitForTimeout(5500);
+    check((await gp.locator('#msgs .m.livep').count()) >= 1 && (await gp.textContent('#msgs')).includes('step one done'), 'Guest sees live progress of Kapil\'s task');
+    await gp.waitForTimeout(4500);
     // v2.9 1-tap submit: guest asks, owner approves
     await gp.fill('#inp', 'submittest'); await gp.click('#sendBtn'); await gp.waitForTimeout(1800); await gp.evaluate(() => loadChat()); await gp.waitForTimeout(500);
     check((await gp.textContent('#msgs')).includes('Waiting for Kapil') && (await gp.locator('#msgs .sreq .okb').count()) === 0, 'Guest sees submit request waiting (no approve button)');
