@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v2.9 rev B';
+const VERSION = 'v2.9 rev C';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -1219,12 +1219,19 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/update') {
       // One-tap update: git pull, then exit so launchd restarts the app with the new code.
       const b = await readBody(req);
-      const git = (args, cb) => execFile('git', args, { cwd: PROJECT, timeout: 60000 }, (e, out, err) => cb(e, String(out || ''), String(err || '')));
+      const git = (args, cb) => execFile('git', args, { cwd: PROJECT, timeout: 60000, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (e, out, err) => cb(e, String(out || ''), String(err || ''))); // v2.9 rev C: never wait for a login prompt
       return git(['status', '--porcelain', '--untracked-files=no'], (e0, changed) => {
         const files = changed.split('\n').filter(l => l.trim()).map(l => l.slice(3).trim());
         // v1.9: fetch, keep any local commit on a backup branch, then move to GitHub's version (no more "diverging branches")
-        const pull = cb => git(['fetch', 'origin', 'main'], (ef, o1, er1) => {
-          if (ef) return cb(ef, '', er1);
+        // v2.9 rev C: GitHub sometimes does not answer: try 3 times (5 s, 15 s), then say clearly why
+        const fetchTry = (n, cb) => git(['fetch', 'origin', 'main'], (ef, o1, er1) => {
+          if (!ef || n >= 3) return cb(ef, er1);
+          setTimeout(() => fetchTry(n + 1, cb), n === 1 ? 5000 : 15000);
+        });
+        const why = (e, er) => { const t = (er || '') + ' ' + (e && e.message || ''); return /could not read Username|Authentication failed|403/i.test(t) ? 'GitHub login on the Mac mini is missing (repo is private). Fix once in Terminal: git -C ~/toshi-agents fetch (it asks you to log in).'
+          : (e && e.killed) || /timed out|Could not resolve|unable to access|Connection/i.test(t) ? 'GitHub did not answer (internet / GitHub busy). Try again in a few minutes.' : 'Update failed: ' + t.trim().slice(-300); };
+        const pull = cb => fetchTry(1, (ef, er1) => {
+          if (ef) return cb(new Error(why(ef, er1)), '', '');
           git(['rev-parse', 'HEAD'], (e2, h) => git(['rev-parse', 'origin/main'], (e3, r) => {
             if (h.trim() === r.trim()) return cb(null, 'Already up to date', '');
             git(['rev-list', '--count', 'origin/main..HEAD'], (e4, n) => {
