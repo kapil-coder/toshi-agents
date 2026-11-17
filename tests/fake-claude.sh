@@ -3,7 +3,7 @@
 if [ "$1" = "--version" ]; then echo "2.1.296 (Claude Code)"; exit 0; fi
 if [[ "$*" == *"--output-format json"* ]]; then echo '{"type":"result","result":"{\"name\":\"Test Bot\",\"job\":\"test\"}"}'; exit 0; fi
 # v1.6 queue test: a message containing "slowtask" takes 3 s; reply echoes the message
-last="${@: -1}"; [[ "$last" == *slowtask* ]] && sleep 3
+last="${@: -1}"; [[ "$last" == *slowtask* ]] && sleep 7
 [[ "$last" == *sessiontest* && "$*" == *--resume* ]] && { echo "No conversation found with session ID: t1" >&2; exit 1; }
 if [[ "$last" == *yaadtest* ]]; then echo '{"type":"assistant","message":{"content":[{"type":"text","text":"Theek hai\n🧠 MEMORY+: GST 18% alag dikhana\n🧠 MEMORY+ shared: Saurabh Nigam partner hai"}]}}'; echo '{"type":"result","subtype":"success","session_id":"11111111-1111-1111-1111-111111111111","permission_denials":[]}'; exit 0; fi
 if [[ "$last" == *memcheck* ]]; then m=no; [[ "$*" == *"GST 18% alag dikhana"* && "$*" == *"Saurabh Nigam partner"* ]] && m=yes; echo '{"type":"assistant","message":{"content":[{"type":"text","text":"memory seen '$m'"}]}}'; echo '{"type":"result","subtype":"success","session_id":"11111111-1111-1111-1111-111111111111","permission_denials":[]}'; exit 0; fi

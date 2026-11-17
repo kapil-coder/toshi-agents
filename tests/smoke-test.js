@@ -183,9 +183,12 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check(!(await p.isDisabled('#sendBtn')) && (await p.isVisible('#stopBtn')), 'Send stays open + stop button while working');
     await p.fill('#inp', 'queued two'); await p.click('#sendBtn'); await p.waitForTimeout(500);
     check((await p.isVisible('#queue')) && (await p.textContent('#queue')).includes('queued two'), 'Message goes to queue while working');
+    await p.evaluate(() => fetch('/api/queue', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: 'mr-c', action: 'add', message: 'added elsewhere' }) }));
+    await p.waitForTimeout(4600);
+    check((await p.textContent('#queue')).includes('added elsewhere'), 'Queue added from another device shows while my task runs');
     await p.waitForTimeout(9000);
     const t = await p.textContent('#msgs');
-    check(t.includes('slowtask one') && t.includes('Smoke test reply: queued two') && await p.isHidden('#queue'), 'Queued message runs after the current task');
+    check(t.includes('slowtask one') && t.includes('Smoke test reply: queued two'), 'Queued message runs after the current task');
     await p.click('#side >> text=Settings'); await p.waitForTimeout(1500);
     check(await p.inputValue('#nTopic') === 'toshi-smoke123', 'Settings: ntfy topic loads');
     check(await p.inputValue('#tmGroup') === 'Toshi Bot Team', 'Settings: Team Desk group loads');

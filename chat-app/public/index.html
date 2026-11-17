@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.9 rev C (17-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.9 rev D (17-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -995,7 +995,11 @@ $('save').onclick = async () => {
 };
 // Auto-refresh: shows messages typed on the other device (Mac mini / iPhone / MacBook)
 async function poll() {
-  if (document.hidden || busyAgents.has(cur) || !$('overlay').hidden || !$('auto').hidden || !$('watchBox').hidden) return;
+  if (document.hidden || !$('overlay').hidden || !$('auto').hidden || !$('watchBox').hidden) return;
+  if (busyAgents.has(cur)) { // v2.9 rev D: while your own message runs, still show queue items others add (e.g. a guest's photo)
+    try { const d = await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json(); if (shown.agent === cur && qSig(d) !== shown.q) { shown.q = qSig(d); showQueue(d.queue, (d.pending || []).length); } } catch {}
+    return;
+  }
   try {
     const d = await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json();
     if (shown.agent !== cur) return;
