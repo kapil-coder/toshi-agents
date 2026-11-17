@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.9 rev A (17-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.9 rev B (17-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -736,7 +736,13 @@ function addMsg(who, text, at, meta = {}) {
     if (prev && prev.dataset.full) { const rb = el('button', 'redo', '↻ Dobara chalao'); rb.type = 'button'; rb.onclick = () => { rb.disabled = true; let t = prev.dataset.full; if (/^(⏰|📨)/.test(t)) t = t.split('\n').slice(1).join('\n'); send(t.trim()); }; d.append(rb); }
   }
   if (who === 'me') d.dataset.full = text;
-  if (who === 'me' && (meta.by || GUEST)) { d.classList.add('byg'); const l = el('span', 'byl', meta.by || GUEST.name); d.prepend(l); } // v2.8 who wrote it
+  // v2.9 rev B: label = who really wrote it. Saved messages carry "by" only for guests; everything else is Kapil.
+  // A message being typed now (no idx yet) is from the person on this screen.
+  if (who === 'me') {
+    const live = meta.idx === undefined, by = meta.by || (live && GUEST ? GUEST.name : '');
+    if (by) { d.classList.add('byg'); d.prepend(el('span', 'byl', by)); }
+    else if (GUEST) d.prepend(el('span', 'byl', 'Kapil'));
+  }
   d.querySelectorAll('pre.cb').forEach(pre => { const raw = pre.textContent; const b = el('button', 'cbcopy', '📋 Copy'); b.type = 'button'; b.onclick = () => copyText(raw, b); pre.append(b); });
   for (const id of reqIds) d.append(submitCard(id)); // v2.9
   for (const id of schedIds) { const c = el('div', 'scard'); c.append(el('b', null, '⏰ Schedule saved')); schedButtons(id, c, true); d.append(c); } // v2.7

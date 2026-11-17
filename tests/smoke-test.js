@@ -150,6 +150,11 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     const gctx = await b.newContext({ viewport: { width: 1200, height: 900 }, extraHTTPHeaders: { 'x-test-login': 'ritvik@test.in' } }); const gp = await gctx.newPage();
     await gp.goto(`http://localhost:${PORT}`); await gp.waitForTimeout(1200);
     check((await gp.locator('#side .agent[data-id]').count()) === 1 && !(await gp.isVisible('#sideSet')) && !(await gp.isVisible('#liveBtn')) && (await gp.textContent('body')).includes('Guest: Ritvik'), 'Guest screen: one bot, no Settings / Live');
+    // v2.9 rev B: Kapil's message must show as Kapil on the guest screen
+    await p.evaluate(() => fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: 'linkedin-desk', message: 'owner note' }) }).then(r => r.text()));
+    await gp.evaluate(() => loadChat()); await gp.waitForTimeout(500);
+    const lab = await gp.evaluate(() => [...document.querySelectorAll('#msgs .m.me')].map(m => (m.querySelector('.byl') || {}).textContent + '|' + m.textContent).filter(t => t.includes('owner note')).pop() || '');
+    check(lab.startsWith('Kapil|'), 'Guest screen labels Kapil\'s message as Kapil');
     await gp.fill('#inp', 'guest hello'); await gp.click('#sendBtn'); await gp.waitForTimeout(1800); await gp.evaluate(() => loadChat()); await gp.waitForTimeout(400);
     const lc = await p.evaluate(() => fetch('/api/chat?agent=linkedin-desk').then(r => r.json()).then(d => d.messages.filter(m => m.who === 'me').pop()));
     check(lc && lc.by === 'Ritvik' && lc.text === 'guest hello', 'Guest message saved with their name');
