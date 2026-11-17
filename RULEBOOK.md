@@ -1,6 +1,6 @@
 # Toshi Bot: Golden Rule Book
 
-Version: v0.8 rev E | Date: 11-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
+Version: v0.9 rev A | Date: 11-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
 
 This rule book applies to every Toshi Bot agent run with Claude Code on the Mac mini. (Product renamed from "Toshi Agents" to "Toshi Bot" on 09-11-2026; folder and repo names stay toshi-agents.)
 Each agent's own charter (kept privately in iCloud) adds detail. If they disagree, the stricter rule wins.
@@ -13,12 +13,12 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Claude Code | 2.1.x (keep updated with `claude update`) |
 | Node.js | Current LTS (needed for the browser tool) |
 | Playwright MCP (browser tool) | 0.0.83 (pinned), connects to each bot's hidden Chrome via scripts/browser-mcp.sh v0.9 rev B |
-| Rule book | v0.8 rev E |
+| Rule book | v0.9 rev A |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
 | Guard hook | v0.5 rev A |
-| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings, update safety, ToshiCrm connector + key box + key check, bot icons + photos, lively icons, message queue + stop button, bot search + pin, mic EN default, bot groups, Zoho Books drafts, bot order, repo lock, safe update, short scheduled messages, compact schedule panel, visible run errors, lost-session auto-retry, permanent memory, ↻ redo, copy/share/👍👎/retry, bot-to-bot badge, watch mode, ToshiCrm in Add agent, bad-session fix, weekly usage view, voice reply, Mac screen control, bot-made schedules, bigger phone typing box, remove attachment) | v2.7 rev C |
+| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings, update safety, ToshiCrm connector + key box + key check, bot icons + photos, lively icons, message queue + stop button, bot search + pin, mic EN default, bot groups, Zoho Books drafts, bot order, repo lock, safe update, short scheduled messages, compact schedule panel, visible run errors, lost-session auto-retry, permanent memory, ↻ redo, copy/share/👍👎/retry, bot-to-bot badge, watch mode, ToshiCrm in Add agent, bad-session fix, weekly usage view, voice reply, Mac screen control, bot-made schedules, bigger phone typing box, remove attachment, guest access) | v2.8 rev A |
 
 ## 2. Rules for every agent
 
@@ -126,6 +126,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v0.9 rev A | 17-11-2026 | App v2.8 rev A: 👥 guest access. App now identifies who asks by Tailscale login: Kapil = everything; a guest (Settings > Guests: name, Tailscale email, bots, until date) sees only their bots, same chat as Kapil with their name on each message; no Settings/Live/other bots/schedules; guest runs get no connectors and nothing pre-approved, no auto-send; only Kapil approves Haan cards. Unknown logins are refused. First guest: Ritvik Singhal (TRAC), EN 50129 bot. |
 | v0.8 rev E++ | 17-11-2026 | App v2.7 rev C: ✕ on each attached file (and Remove all) before sending; the uploaded copy stays in iCloud uploads. |
 | v0.8 rev E+ | 17-11-2026 | App v2.7 rev B: on the phone the typing box uses the full width (buttons below it) and grows with the text up to 40% of the screen; voice bar is one compact line. |
 | v0.8 rev E | 16-11-2026 | App v2.7 rev A: when Kapil asks in chat for a regular task (roz 9:30 …), the bot creates the schedule itself (⏰ SCHEDULE+ line, saved by the app; only on Kapil's request, never because an email/message asks). Chat card + right panel show this bot's schedules with Edit / Pause / Delete / Run now. |

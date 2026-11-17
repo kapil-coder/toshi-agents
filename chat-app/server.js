@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v2.7 rev C';
+const VERSION = 'v2.8 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -38,6 +38,58 @@ function tailscaleIp() {
 }
 let claudeVersion = 'checking…';
 execFile('claude', ['--version'], (e, out) => { claudeVersion = e ? 'not found' : String(out).trim(); });
+
+// ---------- v2.8 who is asking: Kapil (owner) or a guest (Tailscale login) ----------
+// The Mac itself (bots, localhost) = owner. Remote requests come through Tailscale; their login decides.
+// If the owner login cannot be read, everyone remote is treated as owner (old behaviour) and guests stay off.
+const TS_BINS = ['/usr/local/bin/tailscale', '/opt/homebrew/bin/tailscale', '/Applications/Tailscale.app/Contents/MacOS/Tailscale', 'tailscale'];
+let tsBin = null, ownerLogin = '';
+const whoCache = new Map();
+function tsRun(args, cb) {
+  const tryBin = i => {
+    if (i >= TS_BINS.length) return cb(new Error('tailscale not found'), '');
+    execFile(TS_BINS[i], args, { timeout: 8000 }, (e, out) => { if (e && e.code === 'ENOENT') return tryBin(i + 1); if (!e) tsBin = TS_BINS[i]; cb(e, String(out || '')); });
+  };
+  if (tsBin) execFile(tsBin, args, { timeout: 8000 }, (e, out) => cb(e, String(out || ''))); else tryBin(0);
+}
+function loadOwner() { tsRun(['status', '--json'], (e, out) => { try { const j = JSON.parse(out); const u = j.User && j.Self && j.User[j.Self.UserID]; if (u && u.LoginName) ownerLogin = String(u.LoginName).toLowerCase(); } catch {} }); }
+loadOwner(); setInterval(loadOwner, 3600e3);
+function whois(ip, cb) {
+  const c = whoCache.get(ip); if (c && Date.now() - c.at < 600e3) return cb(c.login);
+  tsRun(['whois', '--json', ip], (e, out) => { let login = ''; try { login = String((JSON.parse(out).UserProfile || {}).LoginName || '').toLowerCase(); } catch {} whoCache.set(ip, { at: Date.now(), login }); cb(login); });
+}
+function activeGuest(login) { const today = nowIST().date; return (getSettings().guests || []).find(g => g.login === login && !g.paused && (!g.until || g.until >= today)); }
+function identify(req) {
+  return new Promise(resolve => {
+    const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    const hdr = String(req.headers['tailscale-user-login'] || '').toLowerCase();
+    const remote = req.socket.remoteAddress || '', loop = /^(::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(remote);
+    if (process.env.TOSHI_TEST_LOGIN !== undefined && req.headers['x-test-login'] !== undefined) return decide(String(req.headers['x-test-login']).toLowerCase()); // smoke test only
+    if (loop && !xff && !hdr) return resolve({ role: 'owner' });
+    function decide(login) {
+      const own = process.env.TOSHI_TEST_LOGIN || ownerLogin;
+      if (!own) return resolve({ role: 'owner', login, unsure: true });
+      if (login && login === own) return resolve({ role: 'owner', login });
+      const g = login && activeGuest(login); if (g) return resolve({ role: 'guest', login, guest: g });
+      resolve({ role: 'none', login });
+    }
+    if (hdr) return decide(hdr);
+    const ip = xff || remote.replace(/^::ffff:/, '');
+    if (/^100\./.test(ip) || /^fd7a:/i.test(ip)) return whois(ip, decide);
+    decide('');
+  });
+}
+// What a guest may call: only their bots, chat-type actions. Everything else is refused.
+async function guestGate(req, url, g) {
+  const ok = id => (g.bots || []).includes(id);
+  const P = url.pathname, M = req.method;
+  if (M === 'GET' && (P === '/' || P === '/index.html' || P === '/manifest.json' || /^\/(icon\.svg|icon-180\.png|icon-512\.png|favicon\.ico)$/.test(P))) return true;
+  if (M === 'GET' && ['/api/agents', '/api/groups', '/api/status', '/api/schedules'].includes(P)) return true;
+  if (M === 'GET' && (P === '/api/chat' || P === '/api/avatar')) return ok(url.searchParams.get('agent') || '');
+  if (M === 'POST' && P === '/api/upload') return ok(url.searchParams.get('agent') || '');
+  if (M === 'POST' && ['/api/chat', '/api/stop', '/api/queue', '/api/seen', '/api/feedback'].includes(P)) { req._body = await readBody(req); return ok(String(req._body.agent || '')); }
+  return false;
+}
 
 // ---------- agents ----------
 function listAgents() {
@@ -87,6 +139,7 @@ const stamp = () => new Date().toLocaleString('en-GB', { timeZone: 'Asia/Kolkata
 
 // ---------- helpers ----------
 function readBody(req) {
+  if (req._body !== undefined) return Promise.resolve(req._body); // v2.8: already read by the guest gate
   return new Promise((res, rej) => {
     let b = ''; req.on('data', c => { b += c; if (b.length > 1e6) req.destroy(); });
     req.on('end', () => { try { res(b ? JSON.parse(b) : {}); } catch (e) { rej(e); } }); req.on('error', rej);
@@ -120,8 +173,9 @@ function runClaude(agent, message, opts, onEvent) {
   const memNote = memoryPrompt(agent) + ((chat.sessionId && (chat.sessionRuns || 0) === FRESH_AFTER - 1)
     ? ' THIS CHAT SESSION ENDS AFTER THIS REPLY: at the very end of your reply add up to 5 lines "🧠 MEMORY+: <point>" with long-term facts, decisions or preferences from this conversation that are not already in your memory (skip if none).' : '');
   // v1.3 connectors per bot: switched-off connectors are not loaded for this bot
-  const off = connectorsOff(agent); if (off.length) args.push('--disallowedTools', ...off);
-  const allow = [...new Set([...(chat.allow || []), ...(getSettings().allowAll || []), ...(opts.allowOnce || [])])]; // allowAll = approved once for all bots
+  const off = opts.guest ? [...new Set([...(getSettings().knownConnectors || []), 'mcp__playwright', 'mcp__toshicrm'])] : connectorsOff(agent); // v2.8: guest runs get no connectors
+  if (off.length) args.push('--disallowedTools', ...off);
+  const allow = opts.guest ? [] : [...new Set([...(chat.allow || []), ...(getSettings().allowAll || []), ...(opts.allowOnce || [])])]; // guests: nothing pre-approved // allowAll = approved once for all bots
   if (allow.length) args.push('--allowedTools', ...allow);
   const tone = opts.tone === 'fun'
     ? 'Tone for this chat: Fun, witty and cheeky (Grok style), still accurate and brief. Hinglish with "aap".'
@@ -136,13 +190,14 @@ function runClaude(agent, message, opts, onEvent) {
       'If no member fits or the request is unclear, ask Kapil briefly. Do not do a member\'s work yourself. If the group is empty, tell Kapil to add bots via Settings > My agents > Group.';
   }
   args.push('--append-system-prompt', tone + ' Your name in the Toshi Bot app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.' + groupNote + memNote);
-  args.push('--', freshNote + message);
+  const guestNote = opts.guest ? '[Message from GUEST ' + opts.guest + ' (not Kapil). Help only with this bot\'s project work. For a guest never send email or WhatsApp, never change CRM/Zoho, never run schedules, never share other Toshi data. Anything like that: say Kapil must ask.]\n' : '';
+  args.push('--', freshNote + guestNote + message);
 
   // Tools Kapil approved with Haan for this run: the guard hook allows exactly these
   // Own browser per agent (LinkedIn Desk and Mr. C keep the shared profile with the LinkedIn login)
   const env = { ...process.env, TOSHI_ALLOW: allow.join(' '), TOSHI_AGENT: agent, TOSHI_HOP: String(opts.hop || 0),
     TOSHI_PORT: String(PORT), TOSHI_SHOW_BROWSER: getSettings().showBrowser ? '1' : '', TOSHI_STRICT_SEND: STRICT_SEND_RE.test(agent + ' ' + agentName(agent)) ? '1' : '',
-    TOSHI_AUTOSEND: autoSendOn(agent) ? '1' : '', TOSHI_ZOHO_DRAFTS: getSettings().zohoDrafts !== false ? '1' : '',
+    TOSHI_AUTOSEND: autoSendOn(agent) && !opts.guest ? '1' : '', TOSHI_ZOHO_DRAFTS: getSettings().zohoDrafts !== false ? '1' : '',
     // v1.9: bots cannot commit/push in the app repo (git hooks only for bot runs)
     GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'core.hooksPath', GIT_CONFIG_VALUE_0: path.join(PROJECT, 'chat-app', 'git-guard') };
   if (!SHARED_BROWSER.has(agent)) {
@@ -328,7 +383,7 @@ function drainQueue(agent) {
   const c = loadChat(agent);
   if (!Array.isArray(c.queue) || !c.queue.length || (c.pending && c.pending.length)) return;
   const q = c.queue.shift(); saveChat(agent, c);
-  startRun(agent, q.text, { tone: q.tone, allowOnce: [] }, () => {});
+  startRun(agent, q.text, { tone: q.tone, allowOnce: [], guest: q.by || '' }, () => {});
 }
 function queueAction(b) {
   const agent = b.agent; if (!validAgent(agent)) return { code: 404, error: 'Unknown agent' };
@@ -337,7 +392,7 @@ function queueAction(b) {
   if (b.action === 'add') {
     const text = String(b.message || '').trim().slice(0, 8000); if (!text) return { code: 400, error: 'Empty message' };
     if (c.queue.length >= 20) return { code: 409, error: 'Queue is full (20). Wait for the bot to finish some.' };
-    c.queue.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text, tone: b.tone === 'fun' ? 'fun' : 'pro', at: stamp() });
+    c.queue.push({ id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text, tone: b.tone === 'fun' ? 'fun' : 'pro', at: stamp(), by: b.by || '' });
   } else if (i < 0) return { code: 404, error: 'That queued message is gone (it may have started already).' };
   else if (b.action === 'remove') c.queue.splice(i, 1);
   else if (b.action === 'edit') { const t = String(b.message || '').trim().slice(0, 8000); if (!t) c.queue.splice(i, 1); else c.queue[i].text = t; }
@@ -457,7 +512,7 @@ function startRun(agent, text, opts, onEvent, meta = {}) {
   if (opts.always && Array.isArray(opts.allowOnce)) {
     const st = getSettings(); st.allowAll = [...new Set([...(st.allowAll || []), ...opts.allowOnce.filter(t => !SEND_RE.test(t))])]; writeJSON(SETTINGS_FILE, st);
   }
-  c.messages.push({ who: 'me', text: meta.label ? meta.label + '\n' + text : text, at: stamp() }); delete c.pending; if (meta.handoff) c.unread = true; saveChat(agent, c);
+  c.messages.push({ who: 'me', text: meta.label ? meta.label + '\n' + text : text, at: stamp(), ...(opts.guest ? { by: opts.guest } : {}) }); delete c.pending; if (meta.handoff) c.unread = true; saveChat(agent, c);
   const what = meta.watch ? 'Watch check' : meta.handoff ? 'Task from ' + meta.from : 'Scheduled task ' + meta.time;
   opts.kind = meta.handoff ? 'handoff' : String(meta.time || '').startsWith('team') ? 'team' : (meta.watch || /^👁/.test(meta.label || '')) ? 'watch' : meta.scheduled ? 'schedule' : 'chat';
   return runClaude(agent, text, opts, ev => {
@@ -953,9 +1008,18 @@ const PUBLIC = path.join(__dirname, 'public');
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
+    const who = await identify(req); req.who = who; // v2.8
+    if (who.role === 'none') {
+      if (url.pathname === '/' || url.pathname === '/index.html') { res.writeHead(403, { 'Content-Type': 'text/html; charset=utf-8' }); return res.end('<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><body style="font:16px system-ui;padding:24px"><h2>Toshi Bot</h2><p>Access is not set up for ' + (who.login || 'this device').replace(/[<>&]/g, '') + '. Please ask Kapil.</p>'); }
+      return json(res, 403, { error: 'No access. Ask Kapil.' });
+    }
+    if (who.role === 'guest' && !(await guestGate(req, url, who.guest))) return json(res, 403, { error: 'Not available for guests.' });
+    const G = who.role === 'guest' ? who.guest : null;
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname === '/index.html')) {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0', Pragma: 'no-cache', Expires: '0' });
-      return res.end(fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8').replace('__APP_VERSION__', VERSION));
+      let html = fs.readFileSync(path.join(PUBLIC, 'index.html'), 'utf8').replace('__APP_VERSION__', VERSION);
+      if (G) html = html.replace('<head>', '<head><script>window.__GUEST=' + JSON.stringify({ name: G.name, bots: G.bots }).replace(/</g, '\\u003c') + '</script>');
+      return res.end(html);
     }
     if (req.method === 'GET' && /^\/(icon\.svg|icon-180\.png|icon-512\.png|favicon\.ico)$/.test(url.pathname)) {
       const f = url.pathname === '/favicon.ico' ? 'icon-180.png' : url.pathname.slice(1);
@@ -970,8 +1034,8 @@ const server = http.createServer(async (req, res) => {
         const pins = getSettings().pins || []; // v1.7: pinned bots first
         const list = listAgents().map(a => ({ ...a, ...inboxInfo(a.id), group: groupOf(a.id), busy: running.has(a.id), unread: !!loadChat(a.id).unread, icon: icons[a.id] || '', pinned: pins.includes(a.id),
           photo: ['png', 'jpg', 'jpeg', 'webp'].some(e => fs.existsSync(path.join(adir, a.id + '.' + e))) }));
-        return json(res, 200, orderedAgents(list)); }
-    if (req.method === 'GET' && url.pathname === '/api/groups') return json(res, 200, getGroups().map(g => ({ ...g, busy: running.has(g.id), unread: !!loadChat(g.id).unread })));
+        return json(res, 200, G ? orderedAgents(list).filter(a => (G.bots || []).includes(a.id)).map(a => ({ ...a, pinned: false, group: '' })) : orderedAgents(list)); }
+    if (req.method === 'GET' && url.pathname === '/api/groups') return G ? json(res, 200, []) : json(res, 200, getGroups().map(g => ({ ...g, busy: running.has(g.id), unread: !!loadChat(g.id).unread })));
     if (req.method === 'POST' && url.pathname === '/api/feedback') { // v2.1 👍 / 👎 (+ optional lesson into the bot's memory)
       const b = await readBody(req); if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });
       const vote = b.vote === 'down' ? 'down' : 'up', reason = String(b.reason || '').replace(/[\r\n]+/g, ' ').trim().slice(0, 300);
@@ -1009,7 +1073,7 @@ const server = http.createServer(async (req, res) => {
       const c = loadChat(id); return json(res, 200, { messages: c.messages, pending: c.pending || [], allow: c.allow || [], busy: running.has(id), queue: c.queue || [] });
     }
     if (req.method === 'POST' && url.pathname === '/api/queue') {
-      const r = queueAction(await readBody(req));
+      const qb = await readBody(req); if (G) qb.by = G.name; const r = queueAction(qb);
       return json(res, r.code, r.error ? { error: r.error } : { ok: true, queue: r.queue });
     }
     if (req.method === 'POST' && url.pathname === '/api/chat') {
@@ -1020,7 +1084,7 @@ const server = http.createServer(async (req, res) => {
       if (!text) return json(res, 400, { error: 'Empty message' });
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-cache' });
       // v1.9 rev E: end the stream on 'done' (a retry can follow the first process)
-      startRun(b.agent, text, { tone: b.tone, allowOnce: b.allowOnce || [], always: !!b.always }, ev => { if (res.writableEnded) return; res.write(JSON.stringify(ev) + '\n'); if (ev.t === 'done') setTimeout(() => res.end(), 50); });
+      startRun(b.agent, text, G ? { tone: b.tone, allowOnce: [], always: false, guest: G.name } : { tone: b.tone, allowOnce: b.allowOnce || [], always: !!b.always }, ev => { if (res.writableEnded) return; res.write(JSON.stringify(ev) + '\n'); if (ev.t === 'done') setTimeout(() => res.end(), 50); });
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/stop') {
@@ -1224,7 +1288,7 @@ const server = http.createServer(async (req, res) => {
       const c = loadChat(b.agent); if (c.unread) { delete c.unread; saveChat(b.agent, c); } return json(res, 200, { ok: true });
     }
     if (url.pathname === '/api/schedules') {
-      if (req.method === 'GET') return json(res, 200, loadSchedules());
+      if (req.method === 'GET') return json(res, 200, G ? [] : loadSchedules());
       if (req.method === 'POST') {
         const b = await readBody(req); const list = loadSchedules();
         if (b.action === 'delete') { saveSchedules(list.filter(s => s.id !== b.id)); return json(res, 200, { ok: true }); }
@@ -1253,7 +1317,7 @@ const server = http.createServer(async (req, res) => {
       }
     }
     if (url.pathname === '/api/settings') {
-      if (req.method === 'GET') return json(res, 200, { ...getSettings(), folders: getFolders(), shared: Object.fromEntries(listAgents().map(a => [a.id, usesSharedBrowser(a.id)])) });
+      if (req.method === 'GET') return json(res, 200, { ...getSettings(), owner: ownerLogin, folders: getFolders(), shared: Object.fromEntries(listAgents().map(a => [a.id, usesSharedBrowser(a.id)])) });
       if (req.method === 'POST') {
         const b = await readBody(req); const s = getSettings();
         if (b.action === 'notify') {
@@ -1308,6 +1372,19 @@ const server = http.createServer(async (req, res) => {
             lastRun: prev.lastRun || 0, lastSummary: prev.lastSummary || '' };
           s.watch = s.watch || {}; s.watch[b.id] = w; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
         }
+        if (b.action === 'guestAdd') { // v2.8
+          const login = String(b.login || '').trim().toLowerCase(), name = String(b.name || '').replace(/[<>*\n\r]/g, '').trim().slice(0, 40);
+          if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(login)) return json(res, 400, { error: 'Write the guest\'s Tailscale login email.' });
+          if (!name) return json(res, 400, { error: 'Write the guest\'s name.' });
+          if (ownerLogin && login === ownerLogin) return json(res, 400, { error: 'That is your own login.' });
+          const bots = (Array.isArray(b.bots) ? b.bots : []).filter(id => listAgents().some(a => a.id === id));
+          if (!bots.length) return json(res, 400, { error: 'Tick at least one bot.' });
+          const until = /^\d{4}-\d{2}-\d{2}$/.test(String(b.until || '')) ? b.until : '';
+          s.guests = (s.guests || []).filter(g => g.login !== login); s.guests.push({ id: Date.now().toString(36), name, login, bots, until, paused: false });
+          writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
+        }
+        if (b.action === 'guestRemove') { s.guests = (s.guests || []).filter(g => g.id !== b.id); writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
+        if (b.action === 'guestPause') { const g = (s.guests || []).find(g => g.id === b.id); if (g) g.paused = !g.paused; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'zohoDrafts') { s.zohoDrafts = !!b.on; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'groupAdd' || b.action === 'groupRename') {
           const name = String(b.name || '').replace(/[*\n\r]/g, '').trim().slice(0, 40); if (!name) return json(res, 400, { error: 'Write the group name.' });

@@ -24,7 +24,7 @@ fs.writeFileSync(path.join(tmp, 'icloud', 'app-settings.json'), JSON.stringify(f
 }
 const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'toshi-bin-')); fs.copyFileSync(path.join(ROOT, 'tests', 'fake-claude.sh'), path.join(bin, 'claude')); fs.chmodSync(path.join(bin, 'claude'), 0o755);
 const PORT = 3990 + Math.floor(Math.random() * 9);
-const srv = spawn('node', ['chat-app/server.js'], { cwd: tmp, env: { ...process.env, PORT: String(PORT), PATH: bin + ':' + process.env.PATH, HOME: tmp, TOSHI_WATCH_MS: '2000' } });
+const srv = spawn('node', ['chat-app/server.js'], { cwd: tmp, env: { ...process.env, PORT: String(PORT), PATH: bin + ':' + process.env.PATH, HOME: tmp, TOSHI_WATCH_MS: '2000', TOSHI_TEST_LOGIN: 'kapil@test.in' } });
 let srvErr = ''; srv.stderr.on('data', d => srvErr += d);
 const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  ✗ ') + what); if (!ok) fails.push(what); };
 (async () => {
@@ -135,6 +135,25 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     // v2.6 Mac screen control: request goes with mac:true (on Linux test machine it answers 'Mac mini only')
     const mr = await p.evaluate(() => fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: 'mr-c', mac: true, type: 'click', x: .5, y: .5 }) }).then(r => r.json()));
     check(/Mac mini only/.test(mr.error || ''), 'Mac screen control routes to Mac control');
+    // v2.8 guest access (test header stands in for the Tailscale login)
+    const H = l => ({ 'Content-Type': 'application/json', 'x-test-login': l });
+    await p.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'guestAdd', name: 'Ritvik', login: 'ritvik@test.in', bots: ['linkedin-desk'], until: '2099-12-31' }) }));
+    const gA = await p.evaluate(h => fetch('/api/agents', { headers: h }).then(r => r.json()), H('ritvik@test.in'));
+    check(gA.length === 1 && gA[0].id === 'linkedin-desk', 'Guest sees only their bot');
+    const gS = await p.evaluate(h => fetch('/api/settings', { headers: h }).then(r => r.status), H('ritvik@test.in'));
+    const gC = await p.evaluate(h => fetch('/api/chat?agent=mr-c', { headers: h }).then(r => r.status), H('ritvik@test.in'));
+    const gX = await p.evaluate(h => fetch('/api/agents', { headers: h }).then(r => r.status), H('stranger@test.in'));
+    const gO = await p.evaluate(h => fetch('/api/settings', { headers: h }).then(r => r.status), H('kapil@test.in'));
+    check(gS === 403 && gC === 403 && gX === 403 && gO === 200, 'Guest blocked from Settings / other bots; stranger blocked; owner OK');
+    const gctx = await b.newContext({ viewport: { width: 1200, height: 900 }, extraHTTPHeaders: { 'x-test-login': 'ritvik@test.in' } }); const gp = await gctx.newPage();
+    await gp.goto(`http://localhost:${PORT}`); await gp.waitForTimeout(1200);
+    check((await gp.locator('#side .agent[data-id]').count()) === 1 && !(await gp.isVisible('#sideSet')) && !(await gp.isVisible('#liveBtn')) && (await gp.textContent('body')).includes('Guest: Ritvik'), 'Guest screen: one bot, no Settings / Live');
+    await gp.fill('#inp', 'guest hello'); await gp.click('#sendBtn'); await gp.waitForTimeout(1800); await gp.evaluate(() => loadChat()); await gp.waitForTimeout(400);
+    const lc = await p.evaluate(() => fetch('/api/chat?agent=linkedin-desk').then(r => r.json()).then(d => d.messages.filter(m => m.who === 'me').pop()));
+    check(lc && lc.by === 'Ritvik' && lc.text === 'guest hello', 'Guest message saved with their name');
+    const lbot = await p.evaluate(() => fetch('/api/chat?agent=linkedin-desk').then(r => r.json()).then(d => d.messages.filter(m => m.who === 'bot').pop()));
+    check(lbot && lbot.text === 'guestmode yes', 'Guest run: no connectors, nothing pre-approved');
+    await gctx.close();
     // v1.9 rev B: long scheduled message shows short
     await p.evaluate(() => addMsg('me', '⏰ Scheduled 19:00 IST\n' + 'LinkedIn evening desk steps '.repeat(20), 'x'));
     const lm = p.locator('#msgs .m.me').last();

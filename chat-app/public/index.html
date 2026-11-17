@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.7 rev C (17-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v2.8 rev A (17-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,12 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+body.guest #liveBtn,body.guest #watch,body.guest #pinBtn,body.guest .panel,body.guest #livePanel,body.guest #sideAdd,body.guest #sideSet,body.guest #asearch,body.guest .side h4{display:none!important}
+body.guest .app{grid-template-columns:240px minmax(0,1fr)}
+@media (max-width:900px){body.guest .app{grid-template-columns:minmax(0,1fr)}}
+.m .byl{display:block;font-size:11px;font-weight:600;opacity:.85;margin-bottom:2px}
+.m.me.byg{background:#6b4fb3}
+.guestbar{background:#6b4fb3;color:#fff;font-size:12px;padding:4px 12px;text-align:center}
 .file .fx,.fx.all{border:0;background:none;color:var(--bad);font-size:14px;cursor:pointer;padding:0 4px;margin-left:4px}
 .fx.all{font-size:12px;text-decoration:underline}
 .bs{border-top:1px solid var(--line);padding:6px 0;font-size:12px}.bs .t{display:flex;justify-content:space-between;align-items:center;gap:6px}
@@ -452,6 +458,17 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
       </div>
       <div class="note">Each bot loads only the connectors ticked for it (tap "Connectors" on a bot below). Recommended: WhatsApp bots = browser only; others = browser, Gmail, Google, Zoho, Apollo. Chats also start fresh automatically after 15 messages.</div>
       <div class="msg" id="saveMsg"></div>
+      <h4 style="margin:10px 0 0">👥 Guests</h4>
+      <div class="note" id="ownerNote"></div>
+      <div class="list" id="guestList"></div>
+      <div class="f2">
+        <div class="fld"><label for="gName">Guest name</label><input type="text" id="gName" placeholder="e.g. Ritvik Singhal"></div>
+        <div class="fld"><label for="gLogin">Their Tailscale login email</label><input type="text" id="gLogin" placeholder="name@company.com" autocapitalize="off"></div>
+      </div>
+      <div class="fld"><span class="lbl">Bots they can use</span><div class="opts" id="gBots"></div></div>
+      <div class="f2"><div class="fld"><label for="gUntil">Until (dd-mm-yyyy, empty = no end)</label><input type="text" id="gUntil" placeholder="31-12-2026"></div>
+        <div class="fld" style="align-content:end"><div class="btns"><button class="btn pri" id="gAdd" type="button">Save guest</button><span class="msg" id="gMsg"></span></div></div></div>
+      <div class="note">Guest sees only the ticked bots (same chat as you, their name on each message). No Settings, Live, other bots; the bot never sends email/WhatsApp or changes CRM for a guest; only you approve Haan cards. Share the Mac mini with them in Tailscale (admin → Machines → … → Share).</div>
       <h4 style="margin:10px 0 0">🧠 Memory</h4>
       <div class="note">Bots remember for long term. Say "yaad rakho …" / "remember …" (add "sab bots" / "all bots" for shared). 🟠 at 80%, 🔴 full at 12 KB: then clean up here. Daily backup in iCloud (30 days).</div>
       <div id="memList"><div class="note">Loading…</div></div>
@@ -480,6 +497,7 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
 </div>
 
 <script>
+const GUEST = window.__GUEST || null; // v2.8: guest view (only their bots, chat only)
 const PAGE_VERSION = '__APP_VERSION__'; // filled in by the server; page reloads itself if the app was updated
 const $ = id => document.getElementById(id);
 const COLORS = ['#24427a','#c46a12','#1f8a5b','#6b4fb3','#b8323f','#0a66c2','#8a6d1f','#2f7f86'];
@@ -565,7 +583,7 @@ function selectChat(id) { if (cur === id) return; cur = id; attached = []; showF
 async function loadAgents() {
   const [al, gl] = await Promise.all([fetch('/api/agents').then(r => r.json()), fetch('/api/groups').then(r => r.json()).catch(() => [])]);
   agents = al; groups = gl;
-  if (!agents.some(a => a.id === cur) && !groups.some(g => g.id === cur)) cur = 'mr-c';
+  if (!agents.some(a => a.id === cur) && !groups.some(g => g.id === cur)) cur = agents.some(a => a.id === 'mr-c') ? 'mr-c' : (agents[0] || { id: 'mr-c' }).id;
   const side = $('side'); side.replaceChildren(el('h4', null, 'My agents · ' + agents.length), agentSearch());
   const inGroup = a => !a.pinned && a.group && groups.some(g => g.id === a.group);
   const order = [...agents.filter(a => !inGroup(a))];
@@ -589,10 +607,10 @@ async function loadAgents() {
     b.onclick = () => selectChat(a.id);
     side.append(b);
   }
-  const add = el('button', 'agent'); add.style.color = 'var(--accent)';
+  const add = el('button', 'agent'); add.id = 'sideAdd'; add.style.color = 'var(--accent)';
   const av = el('span', 'av', '+'); av.style.cssText = 'background:transparent;color:var(--accent);border:1px dashed var(--accent)';
   add.append(av, el('b', null, 'New agent')); add.onclick = openAdd; side.append(add);
-  const au = el('button', 'agent'); const av2 = el('span', 'av', '⚙️'); av2.style.cssText = 'background:transparent;border:1px dashed var(--line)';
+  const au = el('button', 'agent'); au.id = 'sideSet'; const av2 = el('span', 'av', '⚙️'); av2.style.cssText = 'background:transparent;border:1px dashed var(--line)';
   au.append(av2, el('b', null, 'Settings')); au.onclick = () => openAuto('set'); side.append(au);
   filterAgents(); showHeader(); loadChat();
 }
@@ -684,7 +702,7 @@ async function loadChat(pre) {
     const e = el('div', 'empty'); e.append(el('b', null, 'Namaste Kapil ji'), el('span', null, 'Type, speak 🎤, paste or attach 📎. Bots send when you ask (auto-send); deletes still wait for your Haan.'));
     m.append(e);
   }
-  d.messages.forEach((x, i) => addMsg(x.who, x.text, x.at, { idx: i, vote: x.vote }));
+  d.messages.forEach((x, i) => addMsg(x.who, x.text, x.at, { idx: i, vote: x.vote, by: x.by }));
   if (d.pending && d.pending.length) addApproval(d.pending);
   $('allowList').textContent = d.allow.length ? d.allow.map(label).join(', ') : 'None yet';
   if (isBusy()) m.append(el('div', 'tool', serverBusy ? 'Working (queued task or another device)… updates here automatically.' : 'Still working… the reply appears here when done. You can use other agents meanwhile.'));
@@ -713,6 +731,7 @@ function addMsg(who, text, at, meta = {}) {
     if (prev && prev.dataset.full) { const rb = el('button', 'redo', '↻ Dobara chalao'); rb.type = 'button'; rb.onclick = () => { rb.disabled = true; let t = prev.dataset.full; if (/^(⏰|📨)/.test(t)) t = t.split('\n').slice(1).join('\n'); send(t.trim()); }; d.append(rb); }
   }
   if (who === 'me') d.dataset.full = text;
+  if (who === 'me' && (meta.by || GUEST)) { d.classList.add('byg'); const l = el('span', 'byl', meta.by || GUEST.name); d.prepend(l); } // v2.8 who wrote it
   d.querySelectorAll('pre.cb').forEach(pre => { const raw = pre.textContent; const b = el('button', 'cbcopy', '📋 Copy'); b.type = 'button'; b.onclick = () => copyText(raw, b); pre.append(b); });
   for (const id of schedIds) { const c = el('div', 'scard'); c.append(el('b', null, '⏰ Schedule saved')); schedButtons(id, c, true); d.append(c); } // v2.7
   if (who === 'bot' && meta.idx !== undefined) d.append(msgActions(d, text, meta));
@@ -783,6 +802,7 @@ function msgActions(d, text, meta) {
   return row;
 }
 function addApproval(items) {
+  if (GUEST) { const n = el('div', 'tool', '⏳ This needs Kapil\'s Haan. He will see it in his app.'); $('msgs').append(n); scroll(); return; }
   const box = el('div', 'ask'); box.append(el('b', null, 'Needs your OK'));
   for (const it of items) { box.append(el('div', null, it.label)); box.append(el('code', null, it.input)); }
   const btns = el('div', 'btns');
@@ -836,6 +856,7 @@ async function loadAgentsQuiet() {
 async function loadChatMeta() { const d = await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json(); $('allowList').textContent = d.allow.length ? d.allow.map(label).join(', ') : 'None yet'; }
 
 let attached = [];
+if (GUEST) { document.body.classList.add('guest'); const gb = el('div', 'guestbar', 'Guest: ' + GUEST.name + ' · Toshi Bot (shared by Kapil)'); document.body.prepend(gb); }
 function showFiles() { // v2.7 rev C: ✕ removes a file before sending (the copy in iCloud uploads stays)
   const f = $('files'); f.replaceChildren();
   attached.forEach((a, i) => { const c = el('span', 'file', '📄 ' + a.name + ' '); const x = el('button', 'fx', '✕'); x.type = 'button'; x.title = 'Remove'; x.setAttribute('aria-label', 'Remove ' + a.name); x.onclick = () => { attached.splice(i, 1); showFiles(); }; c.append(x); f.append(c); });
@@ -1253,6 +1274,19 @@ async function loadSettings() {
   $('autoSend').checked = s.autoSend !== false;
   $('zohoDrafts').checked = s.zohoDrafts !== false;
   loadGroupList();
+  { // v2.8 guests
+    $('ownerNote').textContent = s.owner ? 'Your Tailscale login: ' + s.owner + ' (only this login sees everything).' : '⚠️ Tailscale login not detected yet: guests stay off until it is. Do not share the Mac mini yet.';
+    $('ownerNote').style.color = s.owner ? '' : 'var(--bad)';
+    const gb = $('gBots'); gb.replaceChildren(); for (const a of agents) { const l = el('label'); const c = el('input'); c.type = 'checkbox'; c.value = a.id; l.append(c, document.createTextNode(' ' + a.name)); gb.append(l); }
+    const gl = $('guestList'); gl.replaceChildren(); if (!(s.guests || []).length) gl.append(el('div', 'note', 'No guests.'));
+    for (const g of s.guests || []) {
+      const it = el('div', 'item'), top = el('div', 'top'); const until = g.until ? g.until.split('-').reverse().join('-') : 'no end';
+      top.append(el('b', null, g.name), el('span', 'meta', g.login + ' · until ' + until + ' · ' + g.bots.map(id => (agents.find(a => a.id === id) || { name: id }).name).join(', ') + (g.paused ? ' · PAUSED' : '')));
+      const pz = el('button', 'btn', g.paused ? 'Resume' : 'Pause'); pz.type = 'button'; pz.onclick = () => post('/api/settings', { action: 'guestPause', id: g.id }).then(loadSettings);
+      const rm = el('button', 'btn', 'Remove'); rm.type = 'button'; rm.onclick = () => { if (confirm('Remove guest ' + g.name + '?')) post('/api/settings', { action: 'guestRemove', id: g.id }).then(loadSettings); };
+      top.append(pz, rm); it.append(top); gl.append(it);
+    }
+  }
   loadMemory().catch(() => { $('memList').textContent = 'Memory not available.'; });
   $('dayAlert').value = s.dailyAlertRuns || '';
   fetch('/api/sends').then(r => r.json()).then(list => {
@@ -1407,6 +1441,12 @@ function loadGroupList() {
 }
 $('groupAddBtn').onclick = () => { const v = $('newGroup').value.trim(); if (!v) { $('groupMsg').textContent = 'Write the group name.'; return; }
   post('/api/settings', { action: 'groupAdd', name: v }).then(() => { $('newGroup').value = ''; $('groupMsg').textContent = 'Added ✓'; return loadAgents().then(loadSettings); }).catch(e => { $('groupMsg').textContent = e.message; }); };
+$('gAdd').onclick = () => {
+  const u = $('gUntil').value.trim(), m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(u);
+  if (u && !m) { $('gMsg').textContent = 'Date like 31-12-2026'; return; }
+  post('/api/settings', { action: 'guestAdd', name: $('gName').value, login: $('gLogin').value, until: m ? m[3] + '-' + m[2] + '-' + m[1] : '', bots: [...$('gBots').querySelectorAll('input:checked')].map(x => x.value) })
+    .then(() => { $('gMsg').textContent = 'Saved ✓'; $('gName').value = ''; $('gLogin').value = ''; loadSettings(); }).catch(e => { $('gMsg').textContent = e.message; });
+};
 $('autoSend').onchange = () => post('/api/settings', { action: 'autoSend', on: $('autoSend').checked }).catch(() => {});
 $('closeBr').onclick = () => post('/api/settings', { action: 'closeBrowsers' }).then(() => { $('closeBrMsg').textContent = 'Closed ✓'; }).catch(e => { $('closeBrMsg').textContent = e.message; });
 $('showBrowser').onchange = () => post('/api/settings', { action: 'showBrowser', on: $('showBrowser').checked }).catch(() => {});
