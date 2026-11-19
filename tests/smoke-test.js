@@ -244,6 +244,9 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check(await p.evaluate(() => [...document.querySelectorAll('#fTools input:checked')].map(i => i.parentElement.textContent).join('|').includes('Prabhu ToshiCrm')), 'Add agent: Prabhu ToshiCrm ticked by default');
     await p.evaluate(() => { document.getElementById('overlay').hidden = true; });
     check((await p.textContent('#groupList')).includes('Software Bots'), 'Settings: groups list loads');
+    await p.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'memLimit', id: 'linkedin-desk', kb: 24 }) }));
+    const ml = await p.evaluate(() => fetch('/api/memory').then(r => r.json()).then(l => l.find(x => x.id === 'linkedin-desk').limit));
+    check(ml === 24 * 1024, 'Memory limit per bot can be raised (24 KB)');
     await p.waitForTimeout(400); check((await p.textContent('#memList')).includes('Shared (all bots)') && (await p.textContent('#memList')).includes('points'), 'Settings: memory list loads');
     check((await p.textContent('#usageBox')).includes('₹0'), 'Settings: usage loads');
     await p.click('#tabSched'); await p.waitForTimeout(300); check(await p.isVisible('#sSave'), 'Schedules tab opens');

@@ -1,6 +1,6 @@
 # Toshi Bot: Golden Rule Book
 
-Version: v1.0 rev A | Date: 11-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
+Version: v1.0 rev B | Date: 11-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
 
 This rule book applies to every Toshi Bot agent run with Claude Code on the Mac mini. (Product renamed from "Toshi Agents" to "Toshi Bot" on 09-11-2026; folder and repo names stay toshi-agents.)
 Each agent's own charter (kept privately in iCloud) adds detail. If they disagree, the stricter rule wins.
@@ -13,12 +13,12 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Claude Code | 2.1.x (keep updated with `claude update`) |
 | Node.js | Current LTS (needed for the browser tool) |
 | Playwright MCP (browser tool) | 0.0.83 (pinned), connects to each bot's hidden Chrome via scripts/browser-mcp.sh v0.9 rev B |
-| Rule book | v1.0 rev A |
+| Rule book | v1.0 rev B |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
 | Guard hook | v0.5 rev A |
-| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings, update safety, ToshiCrm connector + key box + key check, bot icons + photos, lively icons, message queue + stop button, bot search + pin, mic EN default, bot groups, Zoho Books drafts, bot order, repo lock, safe update, short scheduled messages, compact schedule panel, visible run errors, lost-session auto-retry, permanent memory, ↻ redo, copy/share/👍👎/retry, bot-to-bot badge, watch mode, ToshiCrm in Add agent, bad-session fix, weekly usage view, voice reply, Mac screen control, bot-made schedules, bigger phone typing box, remove attachment, guest access, fail-closed identity, 1-tap submit, correct name labels, update retries, live queue refresh, shared live progress, scroll stays + chat search, parallel prompt) | v3.1 rev B |
+| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings, update safety, ToshiCrm connector + key box + key check, bot icons + photos, lively icons, message queue + stop button, bot search + pin, mic EN default, bot groups, Zoho Books drafts, bot order, repo lock, safe update, short scheduled messages, compact schedule panel, visible run errors, lost-session auto-retry, permanent memory, ↻ redo, copy/share/👍👎/retry, bot-to-bot badge, watch mode, ToshiCrm in Add agent, bad-session fix, weekly usage view, voice reply, Mac screen control, bot-made schedules, bigger phone typing box, remove attachment, guest access, fail-closed identity, 1-tap submit, correct name labels, update retries, live queue refresh, shared live progress, scroll stays + chat search, parallel prompt, per-bot memory size) | v3.1 rev C |
 
 ## 2. Rules for every agent
 
@@ -126,6 +126,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v1.0 rev B | 20-11-2026 | App v3.1 rev C: memory size per bot (12 / 24 / 48 KB) in Settings > 🧠 Memory; warnings at 80% of that bot's size. |
 | v1.0 rev A+ | 20-11-2026 | App v3.1 rev B: parallel message bubbles no longer squashed (their style name clashed with the sidebar's). |
 | v1.0 rev A | 19-11-2026 | App v3.1 rev A: parallel prompt (Grok style). While a bot works: ⚡ Parallel = a second copy answers at once from a fork of the same session (main task and its session untouched; it avoids editing files the main task may change); ➕ Add to task = the running task pauses and continues with the extra instruction (work kept); Queue as before. Max 2 parallel answers per bot. Stopping shows "⏸ Stopped here" instead of an error. |
 | v0.9 rev E | 19-11-2026 | App v3.0 rev A: when you scroll up to read, new replies no longer pull you down (a ⬇ Naya jawab aaya button shows instead); 🔍 search inside a chat (button or Cmd+F): highlights all matches, ▲ ▼, count. |

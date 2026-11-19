@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v3.1 rev B (20-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v3.1 rev C (20-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -1539,7 +1539,11 @@ async function loadMemory() {
     if (m.id.startsWith('grp-') && !m.size) continue; // empty group memories hidden
     const pct = Math.min(100, Math.round(m.size * 100 / m.limit)), col = pct >= 100 ? 'var(--bad)' : pct >= 80 ? '#e0a92e' : 'var(--ok)';
     const r = el('div', 'memrow'); r.dataset.mem = m.id; const top = el('div', 'top');
-    const ed = el('button', 'btn', 'View / Edit'); ed.type = 'button'; top.append(el('b', null, m.name), ed);
+    const ed = el('button', 'btn', 'View / Edit'); ed.type = 'button';
+    const lim = el('select'); lim.title = 'Memory size for this bot (bigger = remembers more, uses a little more limit per message)'; lim.style.cssText = 'border:1px solid var(--line);border-radius:8px;padding:4px 6px;background:var(--surface);color:inherit;font-size:12px';
+    for (const kb of [12, 24, 48]) lim.add(new Option(kb + ' KB', kb)); lim.value = String(Math.round(m.limit / 1024));
+    lim.onchange = () => post('/api/settings', { action: 'memLimit', id: m.id, kb: Number(lim.value) }).then(() => loadMemory()).catch(e => { alertBox(e.message); });
+    const tr = el('span'); tr.style.cssText = 'display:flex;gap:6px;align-items:center'; tr.append(lim, ed); top.append(el('b', null, m.name), tr);
     const bar = el('div', 'membar'); const i = el('i'); i.style.width = pct + '%'; i.style.background = col; bar.append(i);
     const kb = x => x && x < 103 ? '<0.1' : (x / 1024).toFixed(1);
     const info = el('div', 'note', (pct >= 100 ? '⛔ Full: new points are not saved until you clean up · ' : pct >= 80 ? '⚠️ Clean up soon · ' : '') + kb(m.size) + ' of ' + kb(m.limit) + ' KB · ' + m.points + (m.points === 1 ? ' point' : ' points') + (m.updated ? ' · updated ' + new Date(m.updated).toLocaleDateString('en-GB').replace(/\//g, '-') : ''));

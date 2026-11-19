@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v3.1 rev B';
+const VERSION = 'v3.1 rev C';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -323,7 +323,8 @@ function orderedAgents(list) {
 }
 
 // ---------- v2.0 permanent memory (iCloud/ToshiAgents/memory/<bot>.md + shared.md) ----------
-const memDir = () => path.join(STORE_DIR(), 'memory'), MEM_LIMIT = 12 * 1024; // function: STORE is defined further down
+const memDir = () => path.join(STORE_DIR(), 'memory'), MEM_LIMIT = 12 * 1024;
+const memLimit = id => Math.min(48, Math.max(12, Number((getSettings().memLimits || {})[id]) || 12)) * 1024; // v3.1 rev C: per-bot limit 12 / 24 / 48 KB // function: STORE is defined further down
 const memFile = id => path.join(memDir(), (id === 'shared' ? 'shared' : String(id).replace(/[^a-z0-9-]/gi, '')) + '.md');
 const readMem = id => { try { return fs.readFileSync(memFile(id), 'utf8'); } catch { return ''; } };
 function backupMemoryDaily() {
@@ -340,10 +341,10 @@ function writeMem(id, text) {
   const f = memFile(id); fs.writeFileSync(f + '.tmp', text); fs.renameSync(f + '.tmp', f); memWarn(id);
 }
 function memWarn(id) { // phone alert once a day per memory when 80% or more is used
-  const size = Buffer.byteLength(readMem(id)); if (size < MEM_LIMIT * 0.8) return;
+  const size = Buffer.byteLength(readMem(id)); if (size < memLimit(id) * 0.8) return;
   const st = getSettings(); st.memWarned = st.memWarned || {}; const day = nowIST().date; if (st.memWarned[id] === day) return;
   st.memWarned[id] = day; writeJSON(SETTINGS_FILE, st);
-  notify('Toshi Bot: ' + (id === 'shared' ? 'Shared' : agentName(id)) + ' memory ' + Math.round(size * 100 / MEM_LIMIT) + '% full', 'Clean up in Settings > Memory.');
+  notify('Toshi Bot: ' + (id === 'shared' ? 'Shared' : agentName(id)) + ' memory ' + Math.round(size * 100 / memLimit(id)) + '% full', 'Clean up in Settings > Memory.');
 }
 function memoryPrompt(agent) {
   const sh = readMem('shared').trim(), own = readMem(agent).trim();
@@ -355,7 +356,7 @@ function saveMemoryLines(agent, text) {
   return String(text).replace(/^[ \t>*-]*(?:🧠\s*)?MEMORY\+\s*(shared)?\s*:\s*(.+)$/gmi, (m, sh, point) => {
     const id = sh ? 'shared' : agent, cur = readMem(id), line = '- ' + point.trim().slice(0, 400) + '  (' + nowIST().date + ')\n';
     const where = sh ? 'shared memory (all bots)' : agentName(agent) + ' memory';
-    if (Buffer.byteLength(cur) + Buffer.byteLength(line) > MEM_LIMIT) { memWarn(id); return '⛔ Memory full, not saved (' + where + '): ' + point.trim() + ' — clean up in Settings > Memory.'; }
+    if (Buffer.byteLength(cur) + Buffer.byteLength(line) > memLimit(id)) { memWarn(id); return '⛔ Memory full, not saved (' + where + '): ' + point.trim() + ' — clean up in Settings > Memory.'; }
     if (cur.includes(point.trim())) return '🧠 Already in ' + where + ': ' + point.trim();
     writeMem(id, cur + (cur && !cur.endsWith('\n') ? '\n' : '') + line);
     return '🧠 Saved to ' + where + ': ' + point.trim();
@@ -1085,10 +1086,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/memory') { // v2.0
       if (req.method === 'GET') {
         const one = url.searchParams.get('agent');
-        if (one) { if (one !== 'shared' && !validAgent(one)) return json(res, 404, { error: 'Unknown agent' }); return json(res, 200, { text: readMem(one), limit: MEM_LIMIT }); }
+        if (one) { if (one !== 'shared' && !validAgent(one)) return json(res, 404, { error: 'Unknown agent' }); return json(res, 200, { text: readMem(one), limit: memLimit(one) }); }
         const ids = ['shared', ...listAgents().map(a => a.id), ...getGroups().map(g => g.id)];
         return json(res, 200, ids.map(id => { const t = readMem(id); let up = ''; try { up = fs.statSync(memFile(id)).mtime.toISOString(); } catch {}
-          return { id, name: id === 'shared' ? '🌐 Shared (all bots)' : agentName(id), size: Buffer.byteLength(t), limit: MEM_LIMIT, points: (t.match(/^- /gm) || []).length, updated: up }; }));
+          return { id, name: id === 'shared' ? '🌐 Shared (all bots)' : agentName(id), size: Buffer.byteLength(t), limit: memLimit(id), points: (t.match(/^- /gm) || []).length, updated: up }; }));
       }
       if (req.method === 'POST') {
         const b = await readBody(req); const id = String(b.agent || '');
@@ -1458,6 +1459,10 @@ const server = http.createServer(async (req, res) => {
         }
         if (b.action === 'guestRemove') { s.guests = (s.guests || []).filter(g => g.id !== b.id); writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'guestPause') { const g = (s.guests || []).find(g => g.id === b.id); if (g) g.paused = !g.paused; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
+        if (b.action === 'memLimit') { // v3.1 rev C
+          const id = String(b.id || ''); if (id !== 'shared' && !validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
+          const kb = [12, 24, 48].includes(Number(b.kb)) ? Number(b.kb) : 12; s.memLimits = s.memLimits || {}; s.memLimits[id] = kb; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
+        }
         if (b.action === 'zohoDrafts') { s.zohoDrafts = !!b.on; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'groupAdd' || b.action === 'groupRename') {
           const name = String(b.name || '').replace(/[*\n\r]/g, '').trim().slice(0, 40); if (!name) return json(res, 400, { error: 'Write the group name.' });
