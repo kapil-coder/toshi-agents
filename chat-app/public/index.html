@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v2.9 rev E (17-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v3.0 rev A (19-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,14 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.chat{position:relative}
+.newpill{position:absolute;left:50%;transform:translateX(-50%);bottom:96px;z-index:5;border:0;background:var(--accent);color:#fff;border-radius:18px;padding:7px 16px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.22);cursor:pointer}
+.findbar{display:flex;align-items:center;gap:6px;padding:6px 16px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.findbar input{flex:1;min-width:0;border:1px solid var(--accent);border-radius:8px;padding:6px 9px;background:var(--surface);color:inherit;font-size:14px}
+.findbar #findN{font-size:12px;color:var(--muted);min-width:56px;text-align:center}
+.findbar button{border:1px solid var(--line);background:var(--surface);color:inherit;border-radius:6px;padding:2px 8px;cursor:pointer}
+mark.fm{background:rgba(245,195,59,.55);color:inherit;border-radius:3px;padding:0 1px}
+mark.fm.cur{outline:2px solid #e0a92e;background:rgba(245,195,59,.9)}
 .m.livep{opacity:.85;border-style:dashed}
 .m .sreq{border-color:#e0a92e;background:rgba(224,169,46,.09)}
 .sbtns .okb{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;padding:3px 12px}
@@ -280,6 +288,7 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
           <div class="mode" role="group" aria-label="Personality"><button id="fun">Fun</button><button id="pro" class="on">Pro</button></div>
           <button class="ghost" id="liveBtn" title="Live view of the Mac mini screen">🔴 Live</button>
           <button class="ghost" id="watch" title="Control the Mac mini screen (VNC)">🖥 Watch</button>
+          <button class="ghost" id="findBtn" title="Search this chat (Cmd+F)" aria-label="Search this chat">🔍</button>
           <button class="ghost" id="clear" title="Start a fresh conversation">New chat</button>
         </div>
       </div>
@@ -297,7 +306,9 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
       <div class="vbar" id="vbar" hidden><span>🔊 Bolna:</span><button type="button" id="vAuto">Auto OFF</button>
         <select id="vLang" aria-label="Voice language"><option value="en-IN">Indian English</option><option value="hi-IN">हिन्दी</option></select>
         <select id="vRate" aria-label="Voice speed"><option value="0.9">Dheere</option><option value="1">Normal</option><option value="1.2">Tez</option></select></div>
+      <div class="findbar" id="findBar" hidden><span>🔍</span><input type="text" id="findQ" placeholder="Search this chat…" aria-label="Search this chat" autocomplete="off"><span id="findN"></span><button type="button" id="findUp" title="Previous">▲</button><button type="button" id="findDown" title="Next">▼</button><button type="button" id="findX" title="Close">✕</button></div>
       <div class="msgs" id="msgs"></div>
+      <button type="button" class="newpill" id="newPill" hidden>⬇ Naya jawab aaya</button>
       <div class="files" id="files"></div>
       <div class="queue" id="queue" hidden></div>
       <form class="composer" id="form">
@@ -569,7 +580,16 @@ function botIcon(a, small) {
 }
 const colorOf = id => COLORS[[...id].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
-function scroll() { const m = $('msgs'); m.scrollTop = m.scrollHeight; }
+// v3.0: stay where Kapil is reading; only follow new text when he is already at the bottom
+let forceBottom = true, rendering = false;
+const atBottom = () => { const m = $('msgs'); return m.scrollHeight - m.scrollTop - m.clientHeight < 90; };
+function scroll(force) {
+  const m = $('msgs'); if (rendering && !force) return; // a full re-render decides at its end
+  if (force || forceBottom || atBottom() || m.dataset.follow === '1') { m.scrollTop = m.scrollHeight; m.dataset.follow = '1'; hidePill(); }
+  else showPill();
+}
+function showPill() { const p = $('newPill'); if (p) p.hidden = false; }
+function hidePill() { const p = $('newPill'); if (p) p.hidden = true; }
 
 // ---------- v1.8 groups ----------
 let groups = [], openGroups = new Set();
@@ -582,7 +602,7 @@ function curInfo() {
   return agents.find(x => x.id === cur) || agents[0];
 }
 function toggleGroup(gid) { openGroups.has(gid) ? openGroups.delete(gid) : openGroups.add(gid); saveOpen(); filterAgents(); }
-function selectChat(id) { if (cur === id) return; cur = id; attached = []; showFiles(); try { localStorage.setItem('agent', cur); } catch {} loadAgents(); loadSched().catch(() => {}); }
+function selectChat(id) { if (cur === id) return; forceBottom = true; closeFind(); cur = id; attached = []; showFiles(); try { localStorage.setItem('agent', cur); } catch {} loadAgents(); loadSched().catch(() => {}); }
 async function loadAgents() {
   const [al, gl] = await Promise.all([fetch('/api/agents').then(r => r.json()), fetch('/api/groups').then(r => r.json()).catch(() => [])]);
   agents = al; groups = gl;
@@ -702,7 +722,7 @@ async function loadChat(pre) {
   shown = { agent: cur, liveSig: liveSig(d), count: d.messages.length, pending: (d.pending || []).length, busy: !!d.busy, q: qSig(d) };
   showQueue(d.queue, (d.pending || []).length);
   fetch('/api/seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: cur }) }).catch(() => {});
-  const m = $('msgs'); m.replaceChildren();
+  const m = $('msgs'); const keepTop = (!forceBottom && !atBottom()) ? m.scrollTop : null; const oldCount = shown.prevCount; m.dataset.follow = keepTop === null ? '1' : '0'; rendering = true; m.replaceChildren();
   if (!d.messages.length) {
     const e = el('div', 'empty'); e.append(el('b', null, 'Namaste Kapil ji'), el('span', null, 'Type, speak 🎤, paste or attach 📎. Bots send when you ask (auto-send); deletes still wait for your Haan.'));
     m.append(e);
@@ -712,7 +732,10 @@ async function loadChat(pre) {
   $('allowList').textContent = d.allow.length ? d.allow.map(label).join(', ') : 'None yet';
   if (serverBusy && d.live) { for (const t of d.live.texts || []) { const b = bubble('bot', t); b.classList.add('livep'); m.append(b); } } // v2.9 rev E: live progress for everyone
   if (isBusy()) m.append(el('div', 'tool', serverBusy && d.live && d.live.tool ? 'Using ' + d.live.tool + '…' : serverBusy ? 'Working (queued task or another device)… updates here automatically.' : 'Still working… the reply appears here when done. You can use other agents meanwhile.'));
-  syncSend(); scroll();
+  syncSend(); rendering = false;
+  if (keepTop !== null) { m.scrollTop = keepTop; if (d.messages.length > (oldCount || 0) || (d.live && d.live.texts && d.live.texts.length)) showPill(); } else scroll(true);
+  forceBottom = false; shown.prevCount = d.messages.length;
+  if (!$('findBar').hidden && $('findQ').value.trim()) findRun(false); // keep highlights after a refresh, without jumping
 }
 function label(t) { const m = String(t).match(/^mcp__(.+?)__(.+)$/); return m ? m[1].replace(/^claude_ai_/, '').replace(/_/g, ' ') + ': ' + m[2].replace(/_/g, ' ') : t; }
 function md(text) {
@@ -833,7 +856,7 @@ async function send(text, opts = {}) {
   const agent = cur; busyAgents.add(agent); syncSend(); markSide();
   if (liveAuto) openLive();
   const here = () => cur === agent;
-  addMsg('me', text);
+  forceBottom = true; addMsg('me', text);
   const work = el('div', 'tool', 'Working…'); $('msgs').append(work); scroll(); const said = [];
   try {
     const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1119,6 +1142,43 @@ $('copyAddr').onclick = async () => {
 const DAYN = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const post = (u, b) => fetch(u, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error || 'Failed'); return d; });
 function daysText(d) { if (!d || !d.length || d.length === 7) return 'Every day'; const x = [...d].sort((a, b) => a - b); if (x.length >= 3 && x.every((v, i) => !i || v === x[i - 1] + 1)) return DAYN[x[0]] + '–' + DAYN[x[x.length - 1]]; return x.map(v => DAYN[v] || '?').join(' '); }
+// ---------- v3.0 🔍 search in this chat ----------
+let findHits = [], findAt = -1;
+function clearFind() { for (const mk of document.querySelectorAll('#msgs mark.fm')) { mk.replaceWith(document.createTextNode(mk.textContent)); } for (const m of document.querySelectorAll('#msgs .m')) m.normalize(); findHits = []; }
+function findRun(jump) {
+  const q = $('findQ').value.trim().toLowerCase(); clearFind(); $('findN').textContent = '';
+  if (!q) return;
+  for (const bub of document.querySelectorAll('#msgs .m')) {
+    const walk = document.createTreeWalker(bub, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement.closest('button,.acts,.at,.sbtns') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    const nodes = []; while (walk.nextNode()) nodes.push(walk.currentNode);
+    for (const n of nodes) {
+      const t = n.nodeValue, low = t.toLowerCase(); let i = low.indexOf(q); if (i < 0) continue;
+      const frag = document.createDocumentFragment(); let last = 0;
+      while (i >= 0) { frag.append(t.slice(last, i)); const mk = el('mark', 'fm', t.slice(i, i + q.length)); frag.append(mk); findHits.push(mk); last = i + q.length; i = low.indexOf(q, last); }
+      frag.append(t.slice(last)); n.replaceWith(frag);
+    }
+  }
+  if (!findHits.length) { $('findN').textContent = 'No match'; findAt = -1; return; }
+  if (jump || findAt < 0 || findAt >= findHits.length) findAt = findHits.length - 1; // newest match first
+  findShow(jump);
+}
+function findShow(jump) {
+  findHits.forEach((h, i) => h.classList.toggle('cur', i === findAt));
+  $('findN').textContent = (findAt + 1) + ' of ' + findHits.length;
+  if (jump) { $('msgs').dataset.follow = '0'; findHits[findAt].scrollIntoView({ block: 'center' }); }
+}
+function openFind() { $('findBar').hidden = false; $('findQ').focus(); $('findQ').select(); }
+function closeFind() { if ($('findBar')) { $('findBar').hidden = true; clearFind(); $('findN').textContent = ''; findAt = -1; } }
+$('findBtn').onclick = () => $('findBar').hidden ? openFind() : closeFind();
+$('findX').onclick = closeFind;
+let findTimer = null; $('findQ').oninput = () => { clearTimeout(findTimer); findTimer = setTimeout(() => { findAt = -1; findRun(true); }, 200); };
+$('findQ').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); (e.shiftKey ? $('findUp') : $('findDown')).click(); } if (e.key === 'Escape') closeFind(); };
+$('findUp').onclick = () => { if (!findHits.length) return; findAt = (findAt - 1 + findHits.length) % findHits.length; findShow(true); };
+$('findDown').onclick = () => { if (!findHits.length) return; findAt = (findAt + 1) % findHits.length; findShow(true); };
+document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && $('overlay').hidden && $('auto').hidden) { e.preventDefault(); openFind(); } });
+$('newPill').onclick = () => { $('msgs').dataset.follow = '1'; scroll(true); };
+$('msgs').addEventListener('scroll', () => { const m = $('msgs'); if (atBottom()) { m.dataset.follow = '1'; hidePill(); } else m.dataset.follow = '0'; });
+
 // ---------- v2.9 1-tap submit card ----------
 let reqCache = {};
 function submitCard(id) {

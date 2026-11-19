@@ -178,6 +178,19 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check(rq2.r.status === 'approved' && rq2.last.includes('Kapil approved submit'), 'Kapil ✅ starts the submit run');
     await p.evaluate(() => selectChat('mr-c')); await p.waitForTimeout(600);
     await gctx.close();
+    // v3.0 scroll stays while reading + search
+    await p.evaluate(() => selectChat('linkedin-desk')); await p.waitForTimeout(900);
+    await p.evaluate(() => { const m = document.getElementById('msgs'); m.scrollTop = 0; m.dispatchEvent(new Event('scroll')); });
+    await p.evaluate(() => fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: 'linkedin-desk', message: 'from other device' }) }).then(r => r.text()));
+    await p.waitForTimeout(4800);
+    const scv = await p.evaluate(() => ({ top: document.getElementById('msgs').scrollTop, pill: !document.getElementById('newPill').hidden, has: document.getElementById('msgs').textContent.includes('from other device') }));
+    check(scv.has && scv.top < 50 && scv.pill, 'Reading position kept when a reply arrives + ⬇ pill shows');
+    await p.click('#newPill'); await p.waitForTimeout(200);
+    check(await p.evaluate(() => atBottom()) && await p.isHidden('#newPill'), '⬇ pill jumps to the bottom');
+    await p.click('#findBtn'); await p.fill('#findQ', 'other device'); await p.waitForTimeout(500);
+    check((await p.locator('#msgs mark.fm').count()) >= 1 && /of/.test(await p.textContent('#findN')), '🔍 search highlights matches with count');
+    await p.click('#findX'); check((await p.locator('#msgs mark.fm').count()) === 0, '🔍 close clears highlights');
+    await p.evaluate(() => selectChat('mr-c')); await p.waitForTimeout(600);
     // v1.9 rev B: long scheduled message shows short
     await p.evaluate(() => addMsg('me', '⏰ Scheduled 19:00 IST\n' + 'LinkedIn evening desk steps '.repeat(20), 'x'));
     const lm = p.locator('#msgs .m.me').last();
