@@ -191,6 +191,17 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check((await p.locator('#msgs mark.fm').count()) >= 1 && /of/.test(await p.textContent('#findN')), '🔍 search highlights matches with count');
     await p.click('#findX'); check((await p.locator('#msgs mark.fm').count()) === 0, '🔍 close clears highlights');
     await p.evaluate(() => selectChat('mr-c')); await p.waitForTimeout(600);
+    // v3.1 ⚡ parallel while the main task runs, ➕ add to the running task
+    await p.fill('#inp', 'slowtask main'); await p.click('#sendBtn'); await p.waitForTimeout(600);
+    check(await p.isVisible('#parBtn') && await p.isVisible('#steerBtn'), '⚡ and ➕ show while the bot works');
+    await p.fill('#inp', 'partest quick'); await p.click('#parBtn'); await p.waitForTimeout(1500);
+    const par = await p.evaluate(() => fetch('/api/chat?agent=mr-c').then(r => r.json()));
+    check(par.busy && par.messages.some(m => m.side && m.who === 'bot' && m.text === 'par answer fork yes'), '⚡ parallel answer arrives while main task still runs (forked session)');
+    check(par.messages.some(m => m.side) && !/^2222/.test(par.sessionId || ''), 'Parallel does not change the main session');
+    await p.fill('#inp', 'use montserrat'); await p.click('#steerBtn'); await p.waitForTimeout(5500);
+    const st = await p.evaluate(() => fetch('/api/chat?agent=mr-c').then(r => r.json()));
+    check(st.messages.some(m => m.who === 'me' && m.text.startsWith('➕ Added to task') && m.text.includes('use montserrat')), '➕ add-to-task continues the task with the new instruction');
+    await p.waitForTimeout(1500);
     // v1.9 rev B: long scheduled message shows short
     await p.evaluate(() => addMsg('me', '⏰ Scheduled 19:00 IST\n' + 'LinkedIn evening desk steps '.repeat(20), 'x'));
     const lm = p.locator('#msgs .m.me').last();

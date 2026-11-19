@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v3.0 rev A';
+const VERSION = 'v3.1 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -22,6 +22,9 @@ const readJSON = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8'))
 
 const SEND_RE = /send|reply|forward|trash|delete|spam|share_file|create|update|upsert|post|remove|approve|purchase|merge/i;
 const running = new Map(); // agent -> child process
+// v3.1: stop a run gently (SIGINT), and firmly (SIGTERM) if it is still alive after 3 s
+function stopChild(ch) { if (!ch) return; ch._stopped = true; try { ch.kill('SIGINT'); } catch {} setTimeout(() => { if (ch.exitCode === null && ch.signalCode === null) { try { ch.kill('SIGTERM'); } catch {} } }, 3000); }
+const sideRuns = new Map(); // v3.1 parallel copies: key -> child (do not count as busy)
 const liveRuns = new Map(); // agent -> { texts, tool } of the run in progress (v2.9 rev E)
 // v1.0 rev C (Kapil 10-11-2026): all bots share ONE logged-in browser (Google, LinkedIn) unless set to "Own browser".
 // WhatsApp-type bots keep their own browser by default (their WhatsApp Web login lives there).
@@ -166,13 +169,18 @@ function runClaude(agent, message, opts, onEvent) {
   // v1.3 auto-fresh: after 15 runs in one session, start a new session carrying only the last few messages (saves tokens)
   let freshNote = '';
   // v2.3 rev B: a saved session that is not a real Claude session ID (e.g. test value "t1") is dropped, with recent context carried over
-  if (chat.sessionId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chat.sessionId)) opts = { ...opts, freshContext: true };
-  if ((chat.sessionId && (chat.sessionRuns || 0) >= FRESH_AFTER) || opts.freshContext) {
+  const validSid = chat.sessionId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(chat.sessionId);
+  if (opts.parallel) { // v3.1: a parallel copy forks the main session (or gets recent context) and never changes it
+    if (validSid) args.push('--resume', chat.sessionId, '--fork-session');
+    else freshNote = 'Context (recent messages from this chat):\n' + chat.messages.slice(-7, -1).map(m => (m.who === 'me' ? 'Kapil: ' : 'You: ') + String(m.text).slice(0, 600)).join('\n') + '\n\nNew message:\n';
+  }
+  if (!opts.parallel && chat.sessionId && !validSid) opts = { ...opts, freshContext: true };
+  if (!opts.parallel && ((chat.sessionId && (chat.sessionRuns || 0) >= FRESH_AFTER) || opts.freshContext)) {
     const recent = chat.messages.slice(-7, -1).map(m => (m.who === 'me' ? 'Kapil: ' : 'You: ') + String(m.text).slice(0, 600)).join('\n');
     freshNote = 'Context (new session to save tokens; recent messages from this chat):\n' + recent + '\n\nNew message:\n';
     chat.sessionId = null; chat.sessionRuns = 0; saveChat(agent, chat);
   }
-  if (chat.sessionId) args.push('--resume', chat.sessionId);
+  if (chat.sessionId && !opts.parallel) args.push('--resume', chat.sessionId);
   // v2.0 permanent memory: shared + this bot's memory go into every run; bot saves points with "🧠 MEMORY+" lines
   const memNote = memoryPrompt(agent) + ((chat.sessionId && (chat.sessionRuns || 0) === FRESH_AFTER - 1)
     ? ' THIS CHAT SESSION ENDS AFTER THIS REPLY: at the very end of your reply add up to 5 lines "🧠 MEMORY+: <point>" with long-term facts, decisions or preferences from this conversation that are not already in your memory (skip if none).' : '');
@@ -195,7 +203,8 @@ function runClaude(agent, message, opts, onEvent) {
   }
   args.push('--append-system-prompt', tone + ' Your name in the Toshi Bot app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.' + groupNote + memNote);
   const guestNote = opts.guest ? '[Message from GUEST ' + opts.guest + ' (not Kapil). Help only with this bot\'s project work. For a guest never send email or WhatsApp, never change CRM/Zoho, never run schedules, never share other Toshi data. Anything like that: say Kapil must ask. If the guest asks to submit / upload a document to the ISA tracker or any outside portal: do NOT submit; prepare it (find the exact file in iCloud, name, revision, MDL number, fields to fill) and add one line "📤 SUBMIT-REQUEST: <short summary> | <exact instructions for the submit run, incl. full file path and what to fill>". Kapil approves it with one tap.]\n' : '';
-  args.push('--', freshNote + guestNote + message);
+  const parNote = opts.parallel ? '[⚡ PARALLEL question while your main task in this chat is still running in another copy. Answer it directly and briefly. Prefer reading; do not edit, move or overwrite files the main task may be changing; if a change is needed, say so and let Kapil decide.]\n' : '';
+  args.push('--', freshNote + guestNote + parNote + message);
 
   // Tools Kapil approved with Haan for this run: the guard hook allows exactly these
   // Own browser per agent (LinkedIn Desk and Mr. C keep the shared profile with the LinkedIn login)
@@ -210,8 +219,9 @@ function runClaude(agent, message, opts, onEvent) {
   }
   if (fs.existsSync(ICLOUD)) fs.mkdirSync(path.join(ICLOUD, agent === 'mr-c' || isGroup(agent) ? 'shared' : agent, 'work'), { recursive: true });
   const child = spawn('claude', args, { cwd: PROJECT, env, stdio: ['ignore', 'pipe', 'pipe'] }); // v1.9 rev E: no stdin (saves a 3 s wait per run)
-  running.set(agent, child);
-  const live = { texts: [], tool: '', by: opts.guest || '' }; liveRuns.set(agent, live); // v2.9 rev E: progress everyone can see
+  const sideKey = opts.parallel ? agent + '::' + Date.now() : '';
+  if (opts.parallel) sideRuns.set(sideKey, child); else running.set(agent, child);
+  const live = { texts: [], tool: '', by: opts.guest || '' }; if (!opts.parallel) liveRuns.set(agent, live); // v2.9 rev E: progress everyone can see
   let buf = '', finalText = [], sessionId = chat.sessionId, denials = [], errText = '';
   child.stdout.on('data', d => {
     buf += d; let i;
@@ -237,6 +247,12 @@ function runClaude(agent, message, opts, onEvent) {
   child.stderr.on('data', d => { errText += d; });
   child.on('error', e => { errText = 'Could not start Claude Code: ' + e.message; });
   child.on('close', code => {
+    if (opts.parallel) { // v3.1: save the side answer; leave the main session, Haan cards and queue alone
+      sideRuns.delete(sideKey);
+      const pc = loadChat(agent);
+      pc.messages.push({ who: 'bot', side: true, text: finalText.length ? finalText.join('\n\n') : denials.length ? '⚠️ The parallel copy needed your Haan for ' + denials.map(d => d.label).join(', ') + '. Send it normally (or Queue) so the card can show.' : '⚠️ Parallel answer failed' + (errText ? ': ' + errText.trim().split('\n').slice(-2).join(' ').slice(-300) : '.'), at: stamp() });
+      saveChat(agent, pc); onEvent({ t: 'done' }); return;
+    }
     running.delete(agent); if (liveRuns.get(agent) === live) liveRuns.delete(agent);
     // v1.9 rev E: the saved session is gone (Claude cannot find it) -> start a fresh session with recent context and retry once
     if (code !== 0 && !finalText.length && /No conversation found with session ID|--resume requires a valid session/i.test(errText) && !opts.freshRetry) {
@@ -249,6 +265,7 @@ function runClaude(agent, message, opts, onEvent) {
     c.sessionId = sessionId; c.sessionRuns = (c.sessionRuns || 0) + 1;
     if (finalText.length) c.messages.push({ who: 'bot', text: finalText.join('\n\n'), at: stamp() });
     // v1.9 rev D: a run that ends with no reply leaves a visible note (scheduled/handoff errors were invisible before)
+    else if (!denials.length && child._stopped) c.messages.push({ who: 'bot', text: '⏸ Stopped here on your request. Work done so far is kept.', at: stamp() });
     else if (!denials.length) {
       const why = (errText || '').trim().split('\n').filter(Boolean).slice(-3).join(' ').slice(-400);
       c.messages.push({ who: 'bot', text: '⚠️ ' + (code === 0 ? 'Finished without a reply.' : 'Could not run (code ' + code + ').') + (why ? ' Reason: ' + why : ''), at: stamp() });
@@ -400,7 +417,8 @@ function drainQueue(agent) {
   const c = loadChat(agent);
   if (!Array.isArray(c.queue) || !c.queue.length || (c.pending && c.pending.length)) return;
   const q = c.queue.shift(); saveChat(agent, c);
-  startRun(agent, q.text, { tone: q.tone, allowOnce: [], guest: q.by || '' }, () => {});
+  if (q.steer) startRun(agent, 'Continue exactly the task you were doing (it was paused only to add this; keep the work already done, do not start over). Extra instruction: ' + q.text, { tone: q.tone, allowOnce: [], guest: q.by || '' }, () => {}, { label: '➕ Added to task' });
+  else startRun(agent, q.text, { tone: q.tone, allowOnce: [], guest: q.by || '' }, () => {});
 }
 function queueAction(b) {
   const agent = b.agent; if (!validAgent(agent)) return { code: 404, error: 'Unknown agent' };
@@ -416,7 +434,7 @@ function queueAction(b) {
   else if (b.action === 'now') { const [q] = c.queue.splice(i, 1); c.queue.unshift(q); delete c.pending; }
   else return { code: 400, error: 'Unknown action' };
   saveChat(agent, c);
-  if (b.action === 'now' && running.has(agent)) running.get(agent).kill('SIGINT'); // drain starts it when the run closes
+  if (b.action === 'now' && running.has(agent)) stopChild(running.get(agent)); // drain starts it when the run closes
   else setTimeout(() => drainQueue(agent), 300);
   return { code: 200, queue: c.queue };
 }
@@ -529,7 +547,7 @@ function startRun(agent, text, opts, onEvent, meta = {}) {
   if (opts.always && Array.isArray(opts.allowOnce)) {
     const st = getSettings(); st.allowAll = [...new Set([...(st.allowAll || []), ...opts.allowOnce.filter(t => !SEND_RE.test(t))])]; writeJSON(SETTINGS_FILE, st);
   }
-  c.messages.push({ who: 'me', text: meta.label ? meta.label + '\n' + text : text, at: stamp(), ...(opts.guest ? { by: opts.guest } : {}) }); delete c.pending; if (meta.handoff) c.unread = true; saveChat(agent, c);
+  c.messages.push({ who: 'me', text: meta.label ? meta.label + '\n' + text : text, at: stamp(), ...(opts.guest ? { by: opts.guest } : {}), ...(opts.parallel ? { side: true } : {}) }); if (!opts.parallel) delete c.pending; if (meta.handoff) c.unread = true; saveChat(agent, c);
   const what = meta.watch ? 'Watch check' : meta.handoff ? 'Task from ' + meta.from : 'Scheduled task ' + meta.time;
   opts.kind = meta.handoff ? 'handoff' : String(meta.time || '').startsWith('team') ? 'team' : (meta.watch || /^👁/.test(meta.label || '')) ? 'watch' : meta.scheduled ? 'schedule' : 'chat';
   return runClaude(agent, text, opts, ev => {
@@ -1111,17 +1129,26 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/chat') {
       const b = await readBody(req);
       if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });
-      if (running.has(b.agent)) return json(res, 409, { error: 'This agent is still working. Wait for it to finish.' });
+      if (b.mode === 'steer') { // v3.1 ➕ add to the running task: pause it, then continue with the extra instruction
+        const t = String(b.message || '').trim().slice(0, 8000); if (!t) return json(res, 400, { error: 'Empty message' });
+        if (!running.has(b.agent)) return json(res, 409, { error: 'Nothing is running now. Just send it.' });
+        const c = loadChat(b.agent); c.queue = Array.isArray(c.queue) ? c.queue : [];
+        c.queue.unshift({ id: Date.now().toString(36), text: t, tone: b.tone === 'fun' ? 'fun' : 'pro', at: stamp(), by: G ? G.name : '', steer: true }); saveChat(b.agent, c);
+        stopChild(running.get(b.agent)); return json(res, 200, { ok: true });
+      }
+      if (b.mode === 'parallel') {
+        if ([...sideRuns.keys()].filter(k => k.startsWith(b.agent + '::')).length >= 2) return json(res, 409, { error: 'Two parallel answers are already running for this bot. Wait a moment.' });
+      } else if (running.has(b.agent)) return json(res, 409, { error: 'This agent is still working. Wait for it to finish.' });
       const text = String(b.message || '').trim().slice(0, 8000);
       if (!text) return json(res, 400, { error: 'Empty message' });
       res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-cache' });
       // v1.9 rev E: end the stream on 'done' (a retry can follow the first process)
-      startRun(b.agent, text, G ? { tone: b.tone, allowOnce: [], always: false, guest: G.name } : { tone: b.tone, allowOnce: b.allowOnce || [], always: !!b.always }, ev => { if (res.writableEnded) return; res.write(JSON.stringify(ev) + '\n'); if (ev.t === 'done') setTimeout(() => res.end(), 50); });
+      startRun(b.agent, text, { ...(G ? { tone: b.tone, allowOnce: [], always: false, guest: G.name } : { tone: b.tone, allowOnce: b.allowOnce || [], always: !!b.always }), ...(b.mode === 'parallel' ? { parallel: true, allowOnce: [], always: false } : {}) }, ev => { if (res.writableEnded) return; res.write(JSON.stringify(ev) + '\n'); if (ev.t === 'done') setTimeout(() => res.end(), 50); });
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/stop') {
       const b = await readBody(req); const ch = running.get(b.agent);
-      if (ch) ch.kill('SIGINT'); return json(res, 200, { ok: !!ch });
+      if (ch) stopChild(ch); return json(res, 200, { ok: !!ch });
     }
     if (req.method === 'POST' && url.pathname === '/api/clear') {
       const b = await readBody(req); if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });
