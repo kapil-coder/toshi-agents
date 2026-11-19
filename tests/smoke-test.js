@@ -198,6 +198,8 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     const par = await p.evaluate(() => fetch('/api/chat?agent=mr-c').then(r => r.json()));
     check(par.busy && par.messages.some(m => m.side && m.who === 'bot' && m.text === 'par answer fork yes'), '⚡ parallel answer arrives while main task still runs (forked session)');
     check(par.messages.some(m => m.side) && !/^2222/.test(par.sessionId || ''), 'Parallel does not change the main session');
+    await p.evaluate(() => loadChat()); await p.waitForTimeout(400);
+    check(await p.evaluate(() => [...document.querySelectorAll('#msgs .m.par')].every(b => b.getBoundingClientRect().height > 30 && getComputedStyle(b).overflow !== 'auto')), 'Parallel bubbles are full size (no sidebar style)');
     await p.fill('#inp', 'use montserrat'); await p.click('#steerBtn'); await p.waitForTimeout(5500);
     const st = await p.evaluate(() => fetch('/api/chat?agent=mr-c').then(r => r.json()));
     check(st.messages.some(m => m.who === 'me' && m.text.startsWith('➕ Added to task') && m.text.includes('use montserrat')), '➕ add-to-task continues the task with the new instruction');

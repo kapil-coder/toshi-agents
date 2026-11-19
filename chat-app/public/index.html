@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v3.1 rev A (19-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v3.1 rev B (20-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -84,7 +84,7 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
 .composer .parb{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;width:44px;font-size:18px;cursor:pointer}
-.m.side{border-left:4px solid #0e7490}
+.m.par{border-left:4px solid #0e7490}
 .m .sidetag{display:inline-block;font-size:11px;font-weight:600;border-radius:6px;padding:0 6px;margin-bottom:3px;background:rgba(14,116,144,.15);color:#0e7490}
 .m.me .sidetag{background:rgba(255,255,255,.2);color:#fff}
 .chat{position:relative}
@@ -767,7 +767,7 @@ function addMsg(who, text, at, meta = {}) {
     const prev = [...$('msgs').querySelectorAll('.m.me')].pop();
     if (prev && prev.dataset.full) { const rb = el('button', 'redo', '↻ Dobara chalao'); rb.type = 'button'; rb.onclick = () => { rb.disabled = true; let t = prev.dataset.full; if (/^(⏰|📨)/.test(t)) t = t.split('\n').slice(1).join('\n'); send(t.trim()); }; d.append(rb); }
   }
-  if (meta.side) { d.classList.add('side'); d.prepend(el('span', 'sidetag', who === 'me' ? '⚡ Parallel' : '⚡ Parallel answer')); } // v3.1
+  if (meta.side) { d.classList.add('par'); d.prepend(el('span', 'sidetag', who === 'me' ? '⚡ Parallel' : '⚡ Parallel answer')); } // v3.1
   if (who === 'me') d.dataset.full = text;
   // v2.9 rev B: label = who really wrote it. Saved messages carry "by" only for guests; everything else is Kapil.
   // A message being typed now (no idx yet) is from the person on this screen.
@@ -972,7 +972,7 @@ async function sendParallel(text) {
     for (;;) { const { value, done } = await reader.read(); if (done) break; buf += dec.decode(value, { stream: true }); let i;
       while ((i = buf.indexOf('\n')) >= 0) { const line = buf.slice(0, i); buf = buf.slice(i + 1); if (!line.trim()) continue; const ev = JSON.parse(line);
         if (cur !== agent || !wait.isConnected) continue;
-        if (ev.t === 'text') { const b = bubble('bot', ev.v); b.classList.add('side'); b.prepend(el('span', 'sidetag', '⚡ Parallel answer')); $('msgs').insertBefore(b, wait); scroll(); }
+        if (ev.t === 'text') { const b = bubble('bot', ev.v); b.classList.add('par'); b.prepend(el('span', 'sidetag', '⚡ Parallel answer')); $('msgs').insertBefore(b, wait); scroll(); }
         if (ev.t === 'tool') wait.textContent = '⚡ Parallel: using ' + ev.v + '…'; } }
   } catch (e) { if (cur === agent) $('msgs').append(el('div', 'err', e.message)); }
   wait.remove(); if (cur === agent && !busyAgents.has(agent)) loadChat().catch(() => {});
