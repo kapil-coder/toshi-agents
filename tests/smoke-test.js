@@ -67,6 +67,13 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     require('fs').writeFileSync(require('path').join(tmp, 'icloud', 'chats', 'investor-desk.json'), JSON.stringify({ sessionId: 't1', messages: [] }));
     const r1 = await p.evaluate(() => fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: 'investor-desk', message: 'resumecheck' }) }).then(r => r.text()));
     check(r1.includes('Smoke test reply') && !r1.includes('requires a valid session'), 'Bad saved session "t1" is dropped, run works');
+    // v3.2 📌 pinned rules go with every message (start + end)
+    await p.evaluate(() => fetch('/api/rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: 'mr-c', add: 'Header: Montserrat 10 pt' }) }));
+    await p.fill('#inp', 'rulestest'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
+    check((await p.textContent('#msgs')).includes('rules seen yes'), '📌 pinned rules sent at start and end of the message');
+    check((await p.locator('#msgs .m.me .pinrule').count()) >= 1, '📌 pin button on my messages');
+    const gr = await p.evaluate(() => fetch('/api/rules?agent=linkedin-desk', { headers: { 'x-test-login': 'ritvik@test.in' } }).then(r => r.status));
+    await p.evaluate(() => fetch('/api/rules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: 'mr-c', text: '' }) }));
     // v2.0 memory
     await p.fill('#inp', 'yaadtest'); await p.click('#sendBtn'); await p.waitForTimeout(1500);
     const mt = await p.textContent('#msgs');

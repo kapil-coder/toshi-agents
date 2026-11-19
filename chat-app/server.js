@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v3.1 rev C';
+const VERSION = 'v3.2 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -201,10 +201,12 @@ function runClaude(agent, message, opts, onEvent) {
       'Several bots needed: hand to each. Then reply in 1-3 short lines saying which bot got the work (its reply appears in that bot\'s chat). ' +
       'If no member fits or the request is unclear, ask Kapil briefly. Do not do a member\'s work yourself. If the group is empty, tell Kapil to add bots via Settings > My agents > Group.';
   }
-  args.push('--append-system-prompt', tone + ' Your name in the Toshi Bot app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.' + groupNote + memNote);
+  const rules = readRules(agent).trim();
+  const rulesTop = rules ? '📌 PINNED RULES from Kapil — they override anything else and must be followed in EVERY reply and EVERY document:\n' + rules + '\nWhen you create or change a document or file: before saying done, check it against these rules (and STYLE.md in your work folder if it exists); fix anything that does not match, then report "📌 rules checked".\n\n' : '';
+  args.push('--append-system-prompt', rulesTop + tone + ' Your name in the Toshi Bot app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.' + groupNote + memNote);
   const guestNote = opts.guest ? '[Message from GUEST ' + opts.guest + ' (not Kapil). Help only with this bot\'s project work. For a guest never send email or WhatsApp, never change CRM/Zoho, never run schedules, never share other Toshi data. Anything like that: say Kapil must ask. If the guest asks to submit / upload a document to the ISA tracker or any outside portal: do NOT submit; prepare it (find the exact file in iCloud, name, revision, MDL number, fields to fill) and add one line "📤 SUBMIT-REQUEST: <short summary> | <exact instructions for the submit run, incl. full file path and what to fill>". Kapil approves it with one tap.]\n' : '';
   const parNote = opts.parallel ? '[⚡ PARALLEL question while your main task in this chat is still running in another copy. Answer it directly and briefly. Prefer reading; do not edit, move or overwrite files the main task may be changing; if a change is needed, say so and let Kapil decide.]\n' : '';
-  args.push('--', freshNote + guestNote + parNote + message);
+  args.push('--', freshNote + guestNote + parNote + message + (rules ? '\n\n[📌 Reminder, follow your pinned rules:\n' + rules + ']' : ''));
 
   // Tools Kapil approved with Haan for this run: the guard hook allows exactly these
   // Own browser per agent (LinkedIn Desk and Mr. C keep the shared profile with the LinkedIn login)
@@ -340,6 +342,11 @@ function writeMem(id, text) {
   backupMemoryDaily(); fs.mkdirSync(memDir(), { recursive: true });
   const f = memFile(id); fs.writeFileSync(f + '.tmp', text); fs.renameSync(f + '.tmp', f); memWarn(id);
 }
+// ---------- v3.2 📌 pinned rules: a short must-follow list per bot, sent at the start AND end of every message ----------
+const RULES_LIMIT = 4 * 1024;
+const rulesFile = id => path.join(memDir(), String(id).replace(/[^a-z0-9-]/gi, '') + '.rules.md');
+const readRules = id => { try { return fs.readFileSync(rulesFile(id), 'utf8'); } catch { return ''; } };
+function writeRules(id, text) { backupMemoryDaily(); fs.mkdirSync(memDir(), { recursive: true }); const f = rulesFile(id); fs.writeFileSync(f + '.tmp', String(text).slice(0, RULES_LIMIT)); fs.renameSync(f + '.tmp', f); }
 function memWarn(id) { // phone alert once a day per memory when 80% or more is used
   const size = Buffer.byteLength(readMem(id)); if (size < memLimit(id) * 0.8) return;
   const st = getSettings(); st.memWarned = st.memWarned || {}; const day = nowIST().date; if (st.memWarned[id] === day) return;
@@ -1082,6 +1089,15 @@ const server = http.createServer(async (req, res) => {
       let saved = false;
       if (vote === 'down' && b.remember && reason) saved = /^🧠 Saved/.test(saveMemoryLines(b.agent, '🧠 MEMORY+: Lesson from Kapil\'s 👎: ' + reason));
       return json(res, 200, { ok: true, saved });
+    }
+    if (url.pathname === '/api/rules') { // v3.2 (owner only: guests are refused by the gate)
+      const id = req.method === 'GET' ? url.searchParams.get('agent') || '' : (req._body = await readBody(req)).agent || '';
+      if (!validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
+      if (req.method === 'GET') return json(res, 200, { text: readRules(id), limit: RULES_LIMIT });
+      const b = req._body;
+      if (b.add) { const cur = readRules(id), line = '- ' + String(b.add).replace(/\s+/g, ' ').trim().slice(0, 500) + '\n'; if (Buffer.byteLength(cur + line) > RULES_LIMIT) return json(res, 400, { error: 'Pinned rules are full (4 KB). Edit them in Settings > Memory.' }); writeRules(id, cur + (cur && !cur.endsWith('\n') ? '\n' : '') + line); }
+      else writeRules(id, String(b.text || ''));
+      return json(res, 200, { ok: true, text: readRules(id) });
     }
     if (url.pathname === '/api/memory') { // v2.0
       if (req.method === 'GET') {
