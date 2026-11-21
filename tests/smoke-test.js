@@ -185,6 +185,12 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     check(rq2.r.status === 'approved' && rq2.last.includes('Kapil approved submit'), 'Kapil ✅ starts the submit run');
     await p.evaluate(() => selectChat('mr-c')); await p.waitForTimeout(600);
     await gctx.close();
+    // v3.2 rev B: a pin made on another device shows here without reload
+    await p.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'pin', id: 'investor-desk', on: true }) }));
+    await p.evaluate(() => loadAgentsQuiet()); await p.waitForTimeout(800);
+    check((await p.textContent('#side .agent[data-id="investor-desk"]')).includes('⭐'), 'Pin from another device appears without reload');
+    await p.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'pin', id: 'investor-desk', on: false }) }));
+    await p.evaluate(() => loadAgentsQuiet()); await p.waitForTimeout(600);
     // v3.0 scroll stays while reading + search
     await p.evaluate(() => selectChat('linkedin-desk')); await p.waitForTimeout(900);
     await p.evaluate(() => { const m = document.getElementById('msgs'); m.scrollTop = 0; m.dispatchEvent(new Event('scroll')); });

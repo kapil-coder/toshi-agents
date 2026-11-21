@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v3.2 rev A (20-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v3.2 rev B (21-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -902,6 +902,9 @@ function markSide() { loadAgentsQuiet(); }
 async function loadAgentsQuiet() {
   // refresh sidebar dots without reloading the open chat
   const list = await (await fetch('/api/agents')).json();
+  // v3.2 rev B: pins, order, names, groups or bot list changed on another device -> rebuild the sidebar
+  const sig = l => l.map(a => a.id + (a.pinned ? '*' : '') + '|' + a.name + '|' + (a.group || '')).join(',');
+  if (agents.length && sig(list) !== sig(agents) && !$('agentQ').value) { loadAgents(); return; }
   document.querySelectorAll('#side .agent[data-id]').forEach(b => {
     const a = list.find(x => x.id === b.dataset.id); if (!a) return; sideState(b, a);
   });
@@ -1074,6 +1077,11 @@ async function poll() {
   } catch {}
 }
 setInterval(poll, 4000);
+// v3.2 rev B: coming back to this tab / window -> refresh everything at once (browsers slow down hidden tabs)
+let lastFull = Date.now();
+function wakeRefresh() { if (document.hidden || Date.now() - lastFull < 2000) return; lastFull = Date.now(); loadAgents().catch(() => {}); loadSched().catch(() => {}); }
+document.addEventListener('visibilitychange', wakeRefresh); window.addEventListener('focus', wakeRefresh); window.addEventListener('pageshow', wakeRefresh);
+setInterval(() => { if (!document.hidden && !busyAgents.has(cur) && $('overlay').hidden && $('auto').hidden && Date.now() - lastFull > 60000) { lastFull = Date.now(); loadAgents().catch(() => {}); } }, 15000); // safety net: full refresh every minute
 
 // ---------- Live screen (view only) ----------
 let liveTimer = null, liveAuto = true, liveMac = false;
