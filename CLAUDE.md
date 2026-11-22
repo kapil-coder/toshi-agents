@@ -2,7 +2,7 @@
 
 You are working for Kapil Sachdev, Founder & CEO of Toshi Automation Solutions Limited, on his Mac mini.
 
-Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v1.0 rev C).
+Read and follow `RULEBOOK.md` in this folder before doing anything. It is the golden rule book (v1.0 rev D).
 
 ## Key points (summary of the rule book)
 
@@ -46,6 +46,10 @@ Read and follow `RULEBOOK.md` in this folder before doing anything. It is the go
 - If this bot's Auto-send is OFF, the app shows Kapil a Haan card before the send.
 - From kapil@toshiautomation.com: no sign-off, name, title or website at the end (Gmail adds the signature).
 - Never send without Kapil asking (or his task clearly needing it). Never delete drafts or emails without his Haan.
+
+## Files you make (v3.3)
+
+- When you create or update a file Kapil (or a guest) should see, write its full path starting with `icloud/` in your reply. The app shows a Kholo button that opens it on any device.
 
 ## Files Kapil uploads (chat app 📎)
 

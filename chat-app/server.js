@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v3.2 rev B';
+const VERSION = 'v3.3 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -92,7 +92,7 @@ async function guestGate(req, url, g) {
   const P = url.pathname, M = req.method;
   if (M === 'GET' && (P === '/' || P === '/index.html' || P === '/manifest.json' || /^\/(icon\.svg|icon-180\.png|icon-512\.png|favicon\.ico)$/.test(P))) return true;
   if (M === 'GET' && ['/api/agents', '/api/groups', '/api/status', '/api/schedules', '/api/whoami'].includes(P)) return true;
-  if (M === 'GET' && (P === '/api/chat' || P === '/api/avatar')) return ok(url.searchParams.get('agent') || '');
+  if (M === 'GET' && (P === '/api/chat' || P === '/api/avatar' || P === '/api/files' || P === '/api/file')) return ok(url.searchParams.get('agent') || ''); // files: folder checked again in the handler
   if (M === 'POST' && P === '/api/upload') return ok(url.searchParams.get('agent') || '');
   if (M === 'POST' && ['/api/chat', '/api/stop', '/api/queue', '/api/seen', '/api/feedback'].includes(P)) { req._body = await readBody(req); return ok(String(req._body.agent || '')); }
   return false;
@@ -203,7 +203,7 @@ function runClaude(agent, message, opts, onEvent) {
   }
   const rules = readRules(agent).trim();
   const rulesTop = rules ? '📌 PINNED RULES from Kapil — they override anything else and must be followed in EVERY reply and EVERY document:\n' + rules + '\nWhen you create or change a document or file: before saying done, check it against these rules (and STYLE.md in your work folder if it exists); fix anything that does not match, then report "📌 rules checked".\n\n' : '';
-  args.push('--append-system-prompt', rulesTop + tone + ' Your name in the Toshi Bot app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.' + groupNote + memNote);
+  args.push('--append-system-prompt', rulesTop + tone + ' Your name in the Toshi Bot app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.' + groupNote + memNote + ' FILES: when you create or update a file Kapil should look at (HTML mock, PDF, Excel, Word, image), write its full path starting with icloud/ in your reply (e.g. icloud/' + botDirName(agent) + '/work/name.pdf). The app shows a Kholo button that opens it on his phone or laptop.');
   const guestNote = opts.guest ? '[Message from GUEST ' + opts.guest + ' (not Kapil). Help only with this bot\'s project work. For a guest never send email or WhatsApp, never change CRM/Zoho, never run schedules, never share other Toshi data. Anything like that: say Kapil must ask. If the guest asks to submit / upload a document to the ISA tracker or any outside portal: do NOT submit; prepare it (find the exact file in iCloud, name, revision, MDL number, fields to fill) and add one line "📤 SUBMIT-REQUEST: <short summary> | <exact instructions for the submit run, incl. full file path and what to fill>". Kapil approves it with one tap.]\n' : '';
   const parNote = opts.parallel ? '[⚡ PARALLEL question while your main task in this chat is still running in another copy. Answer it directly and briefly. Prefer reading; do not edit, move or overwrite files the main task may be changing; if a change is needed, say so and let Kapil decide.]\n' : '';
   args.push('--', freshNote + guestNote + parNote + message + (rules ? '\n\n[📌 Reminder, follow your pinned rules:\n' + rules + ']' : ''));
@@ -416,6 +416,48 @@ function saveSubmitLines(agent, text, by) {
     notify('Toshi Bot: ' + (by || 'Someone') + ' wants to submit', summary.slice(0, 120) + ' — open ' + agentName(agent) + ' and tap ✅ Submit.');
     return '📤 Submit request [r:' + id + ']: ' + summary + ' — waiting for Kapil\'s ✅';
   });
+}
+
+// ---------- v3.3 📁 bot files open inside the app (artifact style) ----------
+const VIEW_EXT = /\.(html?|pdf|png|jpe?g|gif|webp|svg|xlsx|xlsm|xls|docx|doc|pptx|csv|md|txt|json)$/i;
+const botDirName = id => (id === 'mr-c' || isGroup(id)) ? 'shared' : String(id).replace(/[^a-z0-9-]/gi, '');
+const MIME = { html: 'text/html; charset=utf-8', htm: 'text/html; charset=utf-8', pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+  csv: 'text/plain; charset=utf-8', md: 'text/plain; charset=utf-8', txt: 'text/plain; charset=utf-8', json: 'text/plain; charset=utf-8',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12', xls: 'application/vnd.ms-excel',
+  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', doc: 'application/msword', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' };
+function listBotFiles(id) {
+  const root = path.join(ICLOUD, botDirName(id)), out = [];
+  const walk = (dir, depth) => { let es = []; try { es = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of es) { if (e.name.startsWith('.')) continue; const f = path.join(dir, e.name);
+      if (e.isDirectory()) { if (depth < 4 && !/^(backup|backups|node_modules)$/i.test(e.name)) walk(f, depth + 1); }
+      else if (VIEW_EXT.test(e.name)) { try { const st = fs.statSync(f); out.push({ path: 'icloud/' + path.relative(ICLOUD, f).split(path.sep).join('/'), name: e.name, size: st.size, mtime: st.mtimeMs }); } catch {} } } };
+  walk(root, 0); return out.sort((a, b) => b.mtime - a.mtime).slice(0, 80);
+}
+// path "icloud/x/y.pdf" or a bare file name (newest match in the bot's folder). Guests: only their bot's folder.
+function resolveBotFile(id, p, guest) {
+  const rootIc = fs.existsSync(ICLOUD) ? fs.realpathSync(ICLOUD) : ICLOUD, botRoot = path.join(rootIc, botDirName(id));
+  let full;
+  if (/^icloud\//.test(p)) full = path.join(rootIc, p.slice(7));
+  else { const hit = listBotFiles(id).find(f => f.name === path.basename(p)); if (!hit) return null; full = path.join(rootIc, hit.path.slice(7)); }
+  try { full = fs.realpathSync(full); } catch { return null; }
+  const allowed = guest ? botRoot : rootIc;
+  if (!(full === allowed || full.startsWith(allowed + path.sep)) || !VIEW_EXT.test(full)) return null;
+  return full;
+}
+const SOFFICE = ['/Applications/LibreOffice.app/Contents/MacOS/soffice', '/opt/homebrew/bin/soffice', '/usr/local/bin/soffice', 'soffice'];
+function officePreview(full, cb) { // Excel/Word -> PDF once, cached by path + time
+  const st = fs.statSync(full), key = require('crypto').createHash('md5').update(full + st.mtimeMs).digest('hex');
+  const dir = path.join(os.tmpdir(), 'toshi-previews'), out = path.join(dir, key + '.pdf'); fs.mkdirSync(dir, { recursive: true });
+  if (fs.existsSync(out)) return cb(null, out);
+  const work = path.join(dir, key); fs.mkdirSync(work, { recursive: true });
+  const tryBin = i => { if (i >= SOFFICE.length) return cb(new Error('Preview needs LibreOffice on the Mac mini. Use ⬇ Download.'));
+    execFile(SOFFICE[i], ['--headless', '--convert-to', 'pdf', '--outdir', work, full], { timeout: 90000 }, e => {
+      if (e && e.code === 'ENOENT') return tryBin(i + 1);
+      const made = (fs.readdirSync(work).find(x => x.endsWith('.pdf')));
+      if (!made) return cb(new Error('Could not make a preview. Use ⬇ Download.'));
+      fs.renameSync(path.join(work, made), out); cb(null, out);
+    }); };
+  tryBin(0);
 }
 
 // ---------- v1.6 message queue: type while a bot works; queued messages run one by one ----------
@@ -1124,6 +1166,23 @@ const server = http.createServer(async (req, res) => {
       const id = url.searchParams.get('agent') || '';
       if (!validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
       const c = loadChat(id); return json(res, 200, { messages: c.messages, pending: c.pending || [], allow: c.allow || [], busy: running.has(id), queue: c.queue || [], requests: c.requests || [], live: running.has(id) ? liveRuns.get(id) || null : null });
+    }
+    if (req.method === 'GET' && url.pathname === '/api/files') { // v3.3
+      const id = url.searchParams.get('agent') || ''; if (!validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
+      return json(res, 200, listBotFiles(id));
+    }
+    if (req.method === 'GET' && url.pathname === '/api/file') { // v3.3: ?agent=&path=  (&dl=1 download, &preview=1 office -> pdf)
+      const id = url.searchParams.get('agent') || ''; if (!validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
+      const full = resolveBotFile(id, String(url.searchParams.get('path') || ''), !!G);
+      if (!full) return json(res, 404, { error: 'File not found (or not in this bot\'s folder).' });
+      const send = (f, asName) => {
+        const ext = path.extname(f).slice(1).toLowerCase(), h = { 'Content-Type': MIME[ext] || 'application/octet-stream', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' };
+        if (url.searchParams.get('dl')) h['Content-Disposition'] = 'attachment; filename="' + path.basename(asName || f).replace(/[^\w.\- ]/g, '_') + '"';
+        if (/^html?$|^svg$/.test(ext)) h['Content-Security-Policy'] = 'sandbox allow-scripts allow-popups'; // bot pages cannot touch the app
+        res.writeHead(200, h); fs.createReadStream(f).pipe(res);
+      };
+      if (url.searchParams.get('preview') && /\.(xlsx|xlsm|xls|docx|doc|pptx)$/i.test(full)) return officePreview(full, (e, pdf) => e ? json(res, 400, { error: e.message }) : send(pdf));
+      return send(full);
     }
     if (req.method === 'POST' && url.pathname === '/api/submitreq') { // v2.9 owner only (guests are refused by the gate)
       const b = await readBody(req); if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });

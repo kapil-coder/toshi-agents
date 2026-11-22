@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v3.2 rev B (21-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v3.3 rev A (22-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -83,6 +83,22 @@ h4{font-family:var(--f-mono);font-size:10.5px;letter-spacing:.08em;text-transfor
 .attmenu button{border:0;background:none;text-align:left;padding:9px 12px;border-radius:8px;font-size:13.5px;cursor:pointer;color:var(--fg)}
 .attmenu button:hover{background:var(--surface-2)}
 .composer{position:relative}
+.viewer{position:fixed;top:0;right:0;bottom:0;width:min(760px,52vw);z-index:60;background:var(--surface);border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.18);display:flex;flex-direction:column}
+.viewer .vbar{display:flex;gap:6px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line)}
+.viewer .vbar b{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.viewer .vbar .btn{font-size:12px;padding:4px 8px;text-decoration:none}
+.viewer .vbody{flex:1;min-height:0;overflow:auto;background:var(--surface-2)}
+.viewer iframe{width:100%;height:100%;border:0;background:#fff}
+.viewer img{max-width:100%;display:block;margin:0 auto}
+.viewer pre{white-space:pre-wrap;padding:12px;margin:0;font:12.5px/1.5 var(--f-mono,monospace)}
+.viewer .vnote{padding:8px 12px;font-size:12px;color:var(--muted)}
+.viewer .frow{display:flex;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.viewer .frow:hover{background:var(--surface)} .viewer .frow span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap} .viewer .frow small{color:var(--muted);flex:none}
+@media (max-width:900px){.viewer{width:100%}}
+.m .fchips{display:grid;gap:6px;margin-top:8px;white-space:normal}
+.m .fchip{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:5px 8px;background:var(--surface)}
+.m .fchip span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px}
+.m .fchip button{border:0;background:var(--accent);color:#fff;border-radius:7px;padding:3px 10px;font-size:12px;cursor:pointer}
 .m.me .pinrule{float:right;border:0;background:none;cursor:pointer;opacity:.55;font-size:13px;padding:0 0 0 6px}
 .m.me .pinrule:hover{opacity:1}
 .composer .parb{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;width:44px;font-size:18px;cursor:pointer}
@@ -295,6 +311,7 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
           <div class="mode" role="group" aria-label="Personality"><button id="fun">Fun</button><button id="pro" class="on">Pro</button></div>
           <button class="ghost" id="liveBtn" title="Live view of the Mac mini screen">🔴 Live</button>
           <button class="ghost" id="watch" title="Control the Mac mini screen (VNC)">🖥 Watch</button>
+          <button class="ghost" id="filesBtn" title="This bot's files">📁</button>
           <button class="ghost" id="findBtn" title="Search this chat (Cmd+F)" aria-label="Search this chat">🔍</button>
           <button class="ghost" id="clear" title="Start a fresh conversation">New chat</button>
         </div>
@@ -315,6 +332,7 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
         <select id="vRate" aria-label="Voice speed"><option value="0.9">Dheere</option><option value="1">Normal</option><option value="1.2">Tez</option></select></div>
       <div class="findbar" id="findBar" hidden><span>🔍</span><input type="text" id="findQ" placeholder="Search this chat…" aria-label="Search this chat" autocomplete="off"><span id="findN"></span><button type="button" id="findUp" title="Previous">▲</button><button type="button" id="findDown" title="Next">▼</button><button type="button" id="findX" title="Close">✕</button></div>
       <div class="msgs" id="msgs"></div>
+      <div class="viewer" id="viewer" hidden><div class="vbar"><b id="vName">Files</b><a id="vDl" class="btn" download>⬇ Download</a><a id="vNew" class="btn" target="_blank" rel="noopener">↗ New tab</a><button type="button" class="btn" id="vList">📁 Files</button><button type="button" class="btn" id="vX">✕</button></div><div class="vbody" id="vBody"></div></div>
       <button type="button" class="newpill" id="newPill" hidden>⬇ Naya jawab aaya</button>
       <div class="files" id="files"></div>
       <div class="queue" id="queue" hidden></div>
@@ -611,7 +629,7 @@ function curInfo() {
   return agents.find(x => x.id === cur) || agents[0];
 }
 function toggleGroup(gid) { openGroups.has(gid) ? openGroups.delete(gid) : openGroups.add(gid); saveOpen(); filterAgents(); }
-function selectChat(id) { if (cur === id) return; forceBottom = true; closeFind(); cur = id; attached = []; showFiles(); try { localStorage.setItem('agent', cur); } catch {} loadAgents(); loadSched().catch(() => {}); }
+function selectChat(id) { if (cur === id) return; forceBottom = true; closeFind(); $('viewer').hidden = true; cur = id; attached = []; showFiles(); try { localStorage.setItem('agent', cur); } catch {} loadAgents(); loadSched().catch(() => {}); }
 async function loadAgents() {
   const [al, gl] = await Promise.all([fetch('/api/agents').then(r => r.json()), fetch('/api/groups').then(r => r.json()).catch(() => [])]);
   agents = al; groups = gl;
@@ -787,6 +805,7 @@ function addMsg(who, text, at, meta = {}) {
   d.querySelectorAll('pre.cb').forEach(pre => { const raw = pre.textContent; const b = el('button', 'cbcopy', '📋 Copy'); b.type = 'button'; b.onclick = () => copyText(raw, b); pre.append(b); });
   for (const id of reqIds) d.append(submitCard(id)); // v2.9
   for (const id of schedIds) { const c = el('div', 'scard'); c.append(el('b', null, '⏰ Schedule saved')); schedButtons(id, c, true); d.append(c); } // v2.7
+  if (who === 'bot') { const fc = fileChips(text); if (fc) d.append(fc); } // v3.3 📄 Kholo
   if (who === 'bot' && meta.idx !== undefined) d.append(msgActions(d, text, meta));
   if (at) d.append(el('span', 'at', at)); $('msgs').append(d); scroll(); return d;
 }
@@ -1226,6 +1245,38 @@ $('findDown').onclick = () => { if (!findHits.length) return; findAt = (findAt +
 document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f' && $('overlay').hidden && $('auto').hidden) { e.preventDefault(); openFind(); } });
 $('newPill').onclick = () => { $('msgs').dataset.follow = '1'; scroll(true); };
 $('msgs').addEventListener('scroll', () => { const m = $('msgs'); if (atBottom()) { m.dataset.follow = '1'; hidePill(); } else m.dataset.follow = '0'; });
+
+// ---------- v3.3 📁 files: Kholo chips + viewer panel ----------
+const FEXT = 'html?|pdf|png|jpe?g|gif|webp|svg|xlsx|xlsm|xls|docx|doc|pptx|csv|md|txt|json';
+const FICON = e => /pdf/.test(e) ? '📕' : /xls|csv/.test(e) ? '📊' : /doc/.test(e) ? '📘' : /ppt/.test(e) ? '📙' : /png|jpe?g|gif|webp|svg/.test(e) ? '🖼' : /html?/.test(e) ? '🌐' : '📄';
+function fileChips(text) {
+  const re = new RegExp('(icloud\\/[^\\s`\'"<>()\\[\\]]+?\\.(?:' + FEXT + '))(?![\\w])|(?<![\\w\\/.-])([\\w][\\w\\-.]*\\.(?:' + FEXT + '))(?![\\w])', 'gi');
+  const seen = new Set(), files = []; let m;
+  while ((m = re.exec(String(text))) && files.length < 8) { const p = (m[1] || m[2]).replace(/[.,;:]+$/, ''); const k = p.split('/').pop(); if (seen.has(k)) continue; seen.add(k); files.push(p); }
+  if (!files.length) return null;
+  const box = el('div', 'fchips');
+  for (const p of files) { const nm = p.split('/').pop(), ext = nm.split('.').pop().toLowerCase(); const c = el('div', 'fchip'); c.append(el('span', null, FICON(ext) + ' ' + nm)); const b = el('button', null, 'Kholo'); b.type = 'button'; b.onclick = () => openViewer(p); c.append(b); box.append(c); }
+  return box;
+}
+const fUrl = (p, extra) => '/api/file?agent=' + encodeURIComponent(cur) + '&path=' + encodeURIComponent(p) + (extra || '');
+async function openViewer(p) {
+  const v = $('viewer'), body = $('vBody'); v.hidden = false; body.replaceChildren();
+  const nm = p.split('/').pop(), ext = nm.split('.').pop().toLowerCase();
+  $('vName').textContent = FICON(ext) + ' ' + nm; $('vDl').hidden = $('vNew').hidden = false; $('vDl').href = fUrl(p, '&dl=1'); $('vNew').href = fUrl(p);
+  if (/^(html?|pdf)$/.test(ext)) { const f = el('iframe'); if (/^html?$/.test(ext)) f.setAttribute('sandbox', 'allow-scripts allow-popups'); f.src = fUrl(p); body.append(f); }
+  else if (/^(png|jpe?g|gif|webp|svg)$/.test(ext)) { const i = el('img'); i.alt = nm; i.src = fUrl(p); body.append(i); }
+  else if (/^(md|txt|csv|json)$/.test(ext)) { const r = await fetch(fUrl(p)); if (!r.ok) { body.append(el('div', 'vnote', (await r.json().catch(() => ({}))).error || 'Could not open.')); return; } const t = await r.text(); const pre = el('pre'); if (ext === 'md') pre.innerHTML = md(t); else pre.textContent = t; body.append(pre); }
+  else { body.append(el('div', 'vnote', 'Preview of ' + nm + ' (made on the Mac mini; first time takes a few seconds). Use ⬇ Download for the real file.')); const f = el('iframe'); f.src = fUrl(p, '&preview=1'); body.append(f); $('vNew').href = fUrl(p, '&preview=1'); }
+}
+async function openFiles() {
+  const v = $('viewer'), body = $('vBody'); v.hidden = false; body.replaceChildren(el('div', 'vnote', 'Loading…'));
+  const a = agents.find(x => x.id === cur) || groups.find(g => g.id === cur); $('vName').textContent = '📁 Files · ' + (a ? a.name : cur); $('vDl').hidden = $('vNew').hidden = true;
+  const list = await (await fetch('/api/files?agent=' + encodeURIComponent(cur))).json().catch(() => []);
+  body.replaceChildren(); if (!Array.isArray(list) || !list.length) { body.append(el('div', 'vnote', 'No files yet in this bot\'s iCloud folder.')); return; }
+  for (const f of list) { const r = el('div', 'frow'); const ext = f.name.split('.').pop().toLowerCase(); const dt = new Date(f.mtime); r.append(el('span', null, FICON(ext) + ' ' + f.name), el('small', null, String(dt.getDate()).padStart(2, '0') + '-' + String(dt.getMonth() + 1).padStart(2, '0') + ' ' + dt.toTimeString().slice(0, 5))); r.title = f.path; r.onclick = () => openViewer(f.path); body.append(r); }
+}
+$('filesBtn').onclick = () => $('viewer').hidden ? openFiles() : ($('viewer').hidden = true);
+$('vList').onclick = openFiles; $('vX').onclick = () => { $('viewer').hidden = true; $('vBody').replaceChildren(); };
 
 // ---------- v2.9 1-tap submit card ----------
 let reqCache = {};

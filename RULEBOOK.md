@@ -1,6 +1,6 @@
 # Toshi Bot: Golden Rule Book
 
-Version: v1.0 rev C | Date: 11-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
+Version: v1.0 rev D | Date: 11-11-2026 | Owner: Kapil Sachdev | Time zone: IST | Dates: dd-mm-yyyy
 
 This rule book applies to every Toshi Bot agent run with Claude Code on the Mac mini. (Product renamed from "Toshi Agents" to "Toshi Bot" on 09-11-2026; folder and repo names stay toshi-agents.)
 Each agent's own charter (kept privately in iCloud) adds detail. If they disagree, the stricter rule wins.
@@ -13,12 +13,12 @@ Each agent's own charter (kept privately in iCloud) adds detail. If they disagre
 | Claude Code | 2.1.x (keep updated with `claude update`) |
 | Node.js | Current LTS (needed for the browser tool) |
 | Playwright MCP (browser tool) | 0.0.83 (pinned), connects to each bot's hidden Chrome via scripts/browser-mcp.sh v0.9 rev B |
-| Rule book | v1.0 rev C |
+| Rule book | v1.0 rev D |
 | Agents | Investor Desk v0.1, LinkedIn Desk v0.1 |
 | Chat app | v0.4 rev D |
 | Auto-start + phone access | v0.5 rev A |
 | Guard hook | v0.5 rev A |
-| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings, update safety, ToshiCrm connector + key box + key check, bot icons + photos, lively icons, message queue + stop button, bot search + pin, mic EN default, bot groups, Zoho Books drafts, bot order, repo lock, safe update, short scheduled messages, compact schedule panel, visible run errors, lost-session auto-retry, permanent memory, ↻ redo, copy/share/👍👎/retry, bot-to-bot badge, watch mode, ToshiCrm in Add agent, bad-session fix, weekly usage view, voice reply, Mac screen control, bot-made schedules, bigger phone typing box, remove attachment, guest access, fail-closed identity, 1-tap submit, correct name labels, update retries, live queue refresh, shared live progress, scroll stays + chat search, parallel prompt, per-bot memory size, 📌 pinned rules, device sync) | v3.2 rev B |
+| Chat app (schedules, notifications, folders, watch, per-agent browser, handoffs, live screen, one-tap update, usage meter, per-bot model, mic, auto-send, icon, paste, screenshot, shared browser, close bot browsers, clearer tick boxes, controllable Live, Team Desk, team-info auto-refresh, save-limits, self-reload, usage without $, safe settings, update safety, ToshiCrm connector + key box + key check, bot icons + photos, lively icons, message queue + stop button, bot search + pin, mic EN default, bot groups, Zoho Books drafts, bot order, repo lock, safe update, short scheduled messages, compact schedule panel, visible run errors, lost-session auto-retry, permanent memory, ↻ redo, copy/share/👍👎/retry, bot-to-bot badge, watch mode, ToshiCrm in Add agent, bad-session fix, weekly usage view, voice reply, Mac screen control, bot-made schedules, bigger phone typing box, remove attachment, guest access, fail-closed identity, 1-tap submit, correct name labels, update retries, live queue refresh, shared live progress, scroll stays + chat search, parallel prompt, per-bot memory size, 📌 pinned rules, device sync, 📁 files viewer) | v3.3 rev A |
 
 ## 2. Rules for every agent
 
@@ -126,6 +126,7 @@ Everything else needs a "Haan": lead replies, sending the intro PDF or catalogue
 | Rev | Date | Change |
 |---|---|---|
 | v0.1 rev A | 08-11-2026 | First rule book. Investor Desk and LinkedIn Desk. Decisions 1 to 4. |
+| v1.0 rev D | 22-11-2026 | App v3.3 rev A: 📁 files open inside Toshi Bot (artifact style). Any file a bot names in a reply (icloud/… path or file name) gets a Kholo chip; it opens in a side viewer (phone: full screen): HTML (sandboxed), PDF, images, text/markdown directly; Excel/Word/PowerPoint as a PDF preview made by LibreOffice on the Mac mini, plus ⬇ Download. 📁 button lists the bot's folder (newest first). Guests see only their bot's folder; no path can leave iCloud/ToshiAgents. |
 | v1.0 rev C+ | 21-11-2026 | App v3.2 rev B: devices stay in sync. Pins, order, names and groups changed on another device rebuild the sidebar; coming back to a tab/window refreshes everything at once; a full refresh every minute as a safety net. |
 | v1.0 rev C | 20-11-2026 | App v3.2 rev A: 📌 pinned rules per bot (max 4 KB, separate from memory). Sent at the START of the system prompt and as a reminder at the END of every message; bots self-check every document against them (and STYLE.md) before saying done. 📌 button on Kapil's messages pins an instruction; edit in Settings > Memory > 📌 Rules. Guests cannot change rules. |
 | v1.0 rev B | 20-11-2026 | App v3.1 rev C: memory size per bot (12 / 24 / 48 KB) in Settings > 🧠 Memory; warnings at 80% of that bot's size. |

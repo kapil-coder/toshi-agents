@@ -11,6 +11,10 @@ try { if (fs.lstatSync(path.join(tmp, 'icloud')).isSymbolicLink()) fs.unlinkSync
 fs.mkdirSync(path.join(tmp, 'icloud'), { recursive: true });
 if (!fs.realpathSync(path.join(tmp, 'icloud')).startsWith(fs.realpathSync(tmp))) { console.error('STOP: test data folder is not private. Not running.'); process.exit(2); }
 // two disabled-by-time schedules for one bot (times far from now never fire: the test runs < 2 min) -> one compact panel line
+fs.mkdirSync(path.join(tmp, 'icloud', 'linkedin-desk', 'work'), { recursive: true });
+fs.writeFileSync(path.join(tmp, 'icloud', 'linkedin-desk', 'work', 'mock.html'), '<h1>Before After Mock</h1>');
+fs.writeFileSync(path.join(tmp, 'icloud', 'linkedin-desk', 'work', 'report.md'), '# Report\n**ok**');
+fs.mkdirSync(path.join(tmp, 'icloud', 'shared', 'work'), { recursive: true }); fs.writeFileSync(path.join(tmp, 'icloud', 'shared', 'work', 'secret.txt'), 'owner only');
 fs.writeFileSync(path.join(tmp, 'icloud', 'schedules.json'), JSON.stringify([{ id: 's1', agent: 'linkedin-desk', task: 't', times: ['09:00'], days: [7], enabled: true }, { id: 's2', agent: 'linkedin-desk', task: 't', times: ['10:00', '09:00'], days: [7], enabled: true }]));
 const fixture = { ntfyTopic: 'toshi-smoke123', notify: true, autoSend: true, dailyAlertRuns: 60,
   team: { enabled: true, group: 'Toshi Bot Team', trigger: '@Toshi', members: 'Manoj, 9315950722\nBobby, 9315950739', topics: 'Order status', interval: 120, model: 'sonnet',
@@ -217,6 +221,23 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     const st = await p.evaluate(() => fetch('/api/chat?agent=mr-c').then(r => r.json()));
     check(st.messages.some(m => m.who === 'me' && m.text.startsWith('➕ Added to task') && m.text.includes('use montserrat')), '➕ add-to-task continues the task with the new instruction');
     await p.waitForTimeout(1500);
+    // v3.3 📁 files open inside the app
+    await p.evaluate(() => selectChat('linkedin-desk')); await p.waitForTimeout(900);
+    await p.fill('#inp', 'filetest'); await p.click('#sendBtn'); await p.waitForTimeout(1600); await p.evaluate(() => loadChat()); await p.waitForTimeout(400);
+    check((await p.locator('#msgs .m.bot').last().locator('.fchip').count()) === 2, 'Kholo chips for files named in the reply (path + bare name)');
+    await p.locator('#msgs .m.bot').last().locator('.fchip button').first().click(); await p.waitForTimeout(800);
+    check(await p.isVisible('#viewer') && (await p.getAttribute('#vBody iframe', 'sandbox')) === 'allow-scripts allow-popups', 'HTML opens in the viewer (sandboxed)');
+    const fr = await p.evaluate(() => fetch('/api/file?agent=linkedin-desk&path=report.md').then(async r => ({ s: r.status, t: await r.text() })));
+    check(fr.s === 200 && fr.t.includes('# Report'), 'Bare file name found in the bot folder');
+    const hd = await p.evaluate(() => fetch('/api/file?agent=linkedin-desk&path=' + encodeURIComponent('icloud/linkedin-desk/work/mock.html')).then(r => r.headers.get('content-security-policy')));
+    check(/sandbox/.test(hd || ''), 'Bot HTML served with sandbox header');
+    const tr = await p.evaluate(() => fetch('/api/file?agent=linkedin-desk&path=' + encodeURIComponent('icloud/../../etc/passwd')).then(r => r.status));
+    const gs = await p.evaluate(() => fetch('/api/file?agent=linkedin-desk&path=' + encodeURIComponent('icloud/shared/work/secret.txt'), { headers: { 'x-test-login': 'ritvik@test.in' } }).then(r => r.status));
+    const go = await p.evaluate(() => fetch('/api/file?agent=linkedin-desk&path=' + encodeURIComponent('icloud/linkedin-desk/work/mock.html'), { headers: { 'x-test-login': 'ritvik@test.in' } }).then(r => r.status));
+    check(tr === 404 && gs === 404 && go === 200, 'No path escape; guest only sees their bot folder');
+    await p.click('#vList'); await p.waitForTimeout(500);
+    check((await p.locator('#vBody .frow').count()) >= 2, '📁 Files list shows the bot folder');
+    await p.click('#vX'); await p.evaluate(() => selectChat('mr-c')); await p.waitForTimeout(600);
     // v1.9 rev B: long scheduled message shows short
     await p.evaluate(() => addMsg('me', '⏰ Scheduled 19:00 IST\n' + 'LinkedIn evening desk steps '.repeat(20), 'x'));
     const lm = p.locator('#msgs .m.me').last();
