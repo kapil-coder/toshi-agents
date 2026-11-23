@@ -28,7 +28,7 @@ fs.writeFileSync(path.join(tmp, 'icloud', 'app-settings.json'), JSON.stringify(f
 }
 const bin = fs.mkdtempSync(path.join(os.tmpdir(), 'toshi-bin-')); fs.copyFileSync(path.join(ROOT, 'tests', 'fake-claude.sh'), path.join(bin, 'claude')); fs.chmodSync(path.join(bin, 'claude'), 0o755);
 const PORT = 3990 + Math.floor(Math.random() * 9);
-const srv = spawn('node', ['chat-app/server.js'], { cwd: tmp, env: { ...process.env, PORT: String(PORT), PATH: bin + ':' + process.env.PATH, HOME: tmp, TOSHI_WATCH_MS: '2000', TOSHI_TEST_LOGIN: 'kapil@test.in' } });
+const srv = spawn('node', ['chat-app/server.js'], { cwd: tmp, env: { ...process.env, PORT: String(PORT), PATH: bin + ':' + process.env.PATH, HOME: tmp, TOSHI_WATCH_MS: '2000', TOSHI_UPTIME_MS: '2000', TOSHI_TEST_LOGIN: 'kapil@test.in' } });
 let srvErr = ''; srv.stderr.on('data', d => srvErr += d);
 const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  ✗ ') + what); if (!ok) fails.push(what); };
 (async () => {
@@ -187,8 +187,25 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     await p.locator('#msgs .sreq .okb').last().click(); await p.waitForTimeout(2000);
     const rq2 = await p.evaluate(id => fetch('/api/chat?agent=linkedin-desk').then(r => r.json()).then(d => ({ r: d.requests.find(x => x.id === id), last: d.messages.filter(m => m.who === 'me').pop().text })), rq.id);
     check(rq2.r.status === 'approved' && rq2.last.includes('Kapil approved submit'), 'Kapil ✅ starts the submit run');
+    // v3.4 guest Haan: Ritvik's approval counts for docs when switched ON; Kapil gets a card with 👍 / ↩
+    const gid = await p.evaluate(() => fetch('/api/settings').then(r => r.json()).then(s => s.guests.find(g => g.name === 'Ritvik').id));
+    await p.evaluate(id => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'guestApprove', id }) }), gid);
+    await gp.fill('#inp', 'gaptest'); await gp.click('#sendBtn'); await gp.waitForTimeout(1800); await gp.evaluate(() => loadChat()); await gp.waitForTimeout(500);
+    check((await gp.textContent('#msgs')).includes('Done yes') && (await gp.locator('#msgs .sgap').count()) >= 1 && (await gp.locator('#msgs .sgap .okb').count()) === 0, 'Approving guest: bot told Haan counts; guest sees note without Kapil buttons');
+    const gu = await gp.evaluate(() => fetch('/api/guestapproval', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: 'linkedin-desk', id: 'x', action: 'undo' }) }).then(r => r.status));
+    check(gu === 403, 'Guest cannot undo / check approvals');
+    await p.evaluate(() => loadChat()); await p.waitForTimeout(700);
+    await p.locator('#msgs .sgap .okb').last().click(); await p.waitForTimeout(700);
+    const ga = await p.evaluate(() => fetch('/api/chat?agent=linkedin-desk').then(r => r.json()).then(d => d.approvals.pop()));
+    check(ga && ga.by === 'Ritvik' && ga.status === 'checked' && ga.files.includes('mock.html'), 'Kapil 👍 marks the guest-approved change checked');
+    await p.evaluate(id => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'guestApprove', id }) }), gid);
     await p.evaluate(() => selectChat('mr-c')); await p.waitForTimeout(600);
     await gctx.close();
+    // v3.4 uptime watch
+    await p.evaluate(port => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'uptime', on: true, sites: 'App | http://localhost:' + port + '/\nDead | http://localhost:1/' }) }), PORT);
+    await p.waitForTimeout(5000);
+    const uv = await p.evaluate(() => fetch('/api/settings').then(r => r.json()).then(s => s.uptimeView));
+    check(uv && uv.sites[0].st && uv.sites[0].st.ok === true && uv.sites[1].st && uv.sites[1].st.ok === false, 'Uptime: up site green, dead site red after 2 checks');
     // v3.2 rev B: a pin made on another device shows here without reload
     await p.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'pin', id: 'investor-desk', on: true }) }));
     await p.evaluate(() => loadAgentsQuiet()); await p.waitForTimeout(800);

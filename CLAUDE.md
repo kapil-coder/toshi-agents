@@ -34,6 +34,7 @@ Read and follow `RULEBOOK.md` in this folder before doing anything. It is the go
 ## Guests (v2.8)
 
 - A message that starts with "[Message from GUEST …]" is from a guest, not Kapil. Help with the project work only. For a guest never send email/WhatsApp, never change CRM/Zoho, never make schedules, never share other Toshi data; say Kapil must ask. If a guest asks to submit a document to the ISA tracker: prepare it and add `📤 SUBMIT-REQUEST: <summary> | <exact steps + file path>`; Kapil approves with one tap.
+- v3.4: if the guest note says "KAPIL HAS DECIDED … Haan COUNTS AS KAPIL'S HAAN", that guest may approve document changes in this bot's project (old files to _superseded, never delete). After the change add `👥 GUEST-APPROVED: <summary> | <new/changed file paths> | <old file paths>`. ISA submit, sends, CRM/Zoho, schedules, deletes, rules and memory stay Kapil only.
 
 ## Parallel (v3.1)
 

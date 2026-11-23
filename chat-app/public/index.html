@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v3.3 rev A (22-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v3.4 rev A (23-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -115,6 +115,8 @@ mark.fm{background:rgba(245,195,59,.55);color:inherit;border-radius:3px;padding:
 mark.fm.cur{outline:2px solid #e0a92e;background:rgba(245,195,59,.9)}
 .m.livep{opacity:.85;border-style:dashed}
 .m .sreq{border-color:#e0a92e;background:rgba(224,169,46,.09)}
+.m .sgap{border-color:#6b4fb3;background:rgba(107,79,179,.08)}
+.upt{display:flex;gap:8px;align-items:center;font-size:13px;padding:4px 0;border-top:1px solid var(--line)}.upt b{flex:1}
 .sbtns .okb{background:var(--accent);color:#fff;border-color:var(--accent);font-weight:600;padding:3px 12px}
 body.guest #liveBtn,body.guest #watch,body.guest #pinBtn,body.guest .panel,body.guest #livePanel,body.guest #sideAdd,body.guest #sideSet,body.guest #asearch,body.guest .side h4{display:none!important}
 body.guest .app{grid-template-columns:240px minmax(0,1fr)}
@@ -509,7 +511,13 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
       <div class="fld"><span class="lbl">Bots they can use</span><div class="opts" id="gBots"></div></div>
       <div class="f2"><div class="fld"><label for="gUntil">Until (dd-mm-yyyy, empty = no end)</label><input type="text" id="gUntil" placeholder="31-12-2026"></div>
         <div class="fld" style="align-content:end"><div class="btns"><button class="btn pri" id="gAdd" type="button">Save guest</button><span class="msg" id="gMsg"></span></div></div></div>
-      <div class="note">Guest sees only the ticked bots (same chat as you, their name on each message). No Settings, Live, other bots; the bot never sends email/WhatsApp or changes CRM for a guest; only you approve Haan cards. Share the Mac mini with them in Tailscale (admin → Machines → … → Share).</div>
+      <div class="note">Guest sees only the ticked bots (same chat as you, their name on each message). No Settings, Live, other bots; the bot never sends email/WhatsApp or changes CRM for a guest; only you approve Haan cards and ISA submits. "Can approve docs: ON" = their Haan counts for document changes; you get a 👥 note with 👍 Theek / ↩ Undo. Share the Mac mini with them in Tailscale (admin → Machines → … → Share).</div>
+      <h4 style="margin:10px 0 0">🟢 Uptime watch (Prabhu CRM)</h4>
+      <div class="note">Every 15 min the Mac checks these sites (no Claude limit used). Down 2 checks in a row = phone alert; back = alert. One per line: Name | https://…</div>
+      <div id="uptList"></div>
+      <label><input type="checkbox" id="uptOn"> Uptime watch ON</label>
+      <textarea id="uptSites" rows="3" style="width:100%;margin-top:6px"></textarea>
+      <div class="btns"><button class="btn pri" id="uptSave" type="button">Save</button><span class="msg" id="uptMsg"></span></div>
       <h4 style="margin:10px 0 0">🧠 Memory</h4>
       <div class="note">Bots remember for long term. Say "yaad rakho …" / "remember …" (add "sab bots" / "all bots" for shared). 🟠 at 80%, 🔴 full at 12 KB: then clean up here. Daily backup in iCloud (30 days).</div>
       <div id="memList"><div class="note">Loading…</div></div>
@@ -746,6 +754,7 @@ async function loadChat(pre) {
   const d = pre || await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json();
   serverBusy = !!d.busy && !busyAgents.has(cur);
   reqCache = Object.fromEntries((d.requests || []).map(r => [r.id, r]));
+  gaCache = Object.fromEntries((d.approvals || []).map(r => [r.id, r])); // v3.4
   shown = { agent: cur, liveSig: liveSig(d), count: d.messages.length, pending: (d.pending || []).length, busy: !!d.busy, q: qSig(d) };
   showQueue(d.queue, (d.pending || []).length);
   fetch('/api/seen', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: cur }) }).catch(() => {});
@@ -780,6 +789,8 @@ function addMsg(who, text, at, meta = {}) {
   const shortText = long ? text.split('\n')[0] + '\n' + text.split('\n').slice(1).join(' ').slice(0, 90) + '…' : text;
   const reqIds = who === 'bot' ? [...String(text).matchAll(/📤 Submit request \[r:([a-z0-9]+)\]/g)].map(m => m[1]) : [];
   if (reqIds.length) text = text.replace(/ \[r:[a-z0-9]+\]/g, '');
+  const gaIds = who === 'bot' ? [...String(text).matchAll(/👥 .+? approved \[ga:([a-z0-9]+)\]/g)].map(m => m[1]) : []; // v3.4
+  if (gaIds.length) text = text.replace(/ \[ga:[a-z0-9]+\]/g, '');
   const schedIds = who === 'bot' ? [...String(text).matchAll(/⏰ Schedule saved \[s:([a-z0-9]+)\]/g)].map(m => m[1]) : [];
   if (schedIds.length) { text = text.replace(/ \[s:[a-z0-9]+\]/g, ''); }
   const d = bubble(who, schedIds.length ? text : shortText);
@@ -804,6 +815,7 @@ function addMsg(who, text, at, meta = {}) {
   }
   d.querySelectorAll('pre.cb').forEach(pre => { const raw = pre.textContent; const b = el('button', 'cbcopy', '📋 Copy'); b.type = 'button'; b.onclick = () => copyText(raw, b); pre.append(b); });
   for (const id of reqIds) d.append(submitCard(id)); // v2.9
+  for (const id of gaIds) d.append(gaCard(id)); // v3.4
   for (const id of schedIds) { const c = el('div', 'scard'); c.append(el('b', null, '⏰ Schedule saved')); schedButtons(id, c, true); d.append(c); } // v2.7
   if (who === 'bot') { const fc = fileChips(text); if (fc) d.append(fc); } // v3.3 📄 Kholo
   if (who === 'bot' && meta.idx !== undefined) d.append(msgActions(d, text, meta));
@@ -1294,6 +1306,21 @@ function submitCard(id) {
   }
   return c;
 }
+// ---------- v3.4 guest-approved change card (Kapil: 👍 Theek / ↩ Undo) ----------
+let gaCache = {};
+function gaCard(id) {
+  const c = el('div', 'scard sgap'); const r = gaCache[id];
+  if (!r) { c.append(el('span', 'note', 'Guest approval')); return c; }
+  const st = r.status === 'checked' ? ' · 👍 checked by Kapil ' + (r.done || '') : r.status === 'undone' ? ' · ↩ undone ' + (r.done || '') : '';
+  c.append(el('b', null, '👥 ' + r.by + ' ne approve kiya'), el('div', 'note', r.summary + ' · ' + r.at + st));
+  const fc = fileChips((r.files || '') + ' ' + (r.old || '')); if (fc) c.append(fc);
+  if (r.status === 'new' && !GUEST) {
+    const row = el('div', 'sbtns'); const ok = el('button', 'okb', '👍 Theek'); const un = el('button', 'del', '↩ Undo'); ok.type = un.type = 'button';
+    const act = a => post('/api/guestapproval', { agent: cur, id, action: a }).then(() => { r.status = a === 'ok' ? 'checked' : 'undone'; r.done = 'now'; c.replaceWith(gaCard(id)); if (a === 'undo') setTimeout(() => loadChat().catch(() => {}), 1500); }).catch(e => row.append(el('span', 'note', ' ' + e.message)));
+    ok.onclick = () => act('ok'); un.onclick = () => { if (confirm('Undo this change? Old files come back from _superseded.')) act('undo'); }; row.append(ok, un); c.append(row);
+  }
+  return c;
+}
 // ---------- v2.7 schedule card + side panel (edit / pause / delete / run) ----------
 const schedPost = b => post('/api/schedules', b);
 async function schedButtons(id, box, inChat) {
@@ -1481,8 +1508,16 @@ async function loadSettings() {
       top.append(el('b', null, g.name), el('span', 'meta', g.login + ' · until ' + until + ' · ' + g.bots.map(id => (agents.find(a => a.id === id) || { name: id }).name).join(', ') + (g.paused ? ' · PAUSED' : '')));
       const pz = el('button', 'btn', g.paused ? 'Resume' : 'Pause'); pz.type = 'button'; pz.onclick = () => post('/api/settings', { action: 'guestPause', id: g.id }).then(loadSettings);
       const rm = el('button', 'btn', 'Remove'); rm.type = 'button'; rm.onclick = () => { if (confirm('Remove guest ' + g.name + '?')) post('/api/settings', { action: 'guestRemove', id: g.id }).then(loadSettings); };
-      top.append(pz, rm); it.append(top); gl.append(it);
+      const ap = el('button', 'btn', g.canApprove ? '✅ Can approve docs: ON' : 'Can approve docs: OFF'); ap.type = 'button'; ap.title = 'ON: their Haan counts for document changes in their bots (you get a note to check / undo)';
+      ap.onclick = () => post('/api/settings', { action: 'guestApprove', id: g.id }).then(loadSettings);
+      top.append(ap, pz, rm); it.append(top); gl.append(it);
     }
+  }
+  if (s.uptimeView) { // v3.4
+    const ul = $('uptList'); ul.replaceChildren(); $('uptOn').checked = s.uptimeView.on;
+    $('uptSites').value = s.uptimeView.sites.map(x => x.name + ' | ' + x.url).join('\n');
+    for (const x of s.uptimeView.sites) { const r = el('div', 'upt'); const st = x.st;
+      r.append(el('span', null, !st ? '⚪' : st.ok ? '🟢' : '🔴'), el('b', null, x.name), el('span', 'meta', !st ? 'not checked yet' : (st.ok ? 'up' : 'DOWN since ' + st.since) + ' · ' + st.at + ' · ' + st.code + ' · ' + st.ms + ' ms')); ul.append(r); }
   }
   loadMemory().catch(() => { $('memList').textContent = 'Memory not available.'; });
   $('dayAlert').value = s.dailyAlertRuns || '';
@@ -1654,6 +1689,7 @@ function loadGroupList() {
 }
 $('groupAddBtn').onclick = () => { const v = $('newGroup').value.trim(); if (!v) { $('groupMsg').textContent = 'Write the group name.'; return; }
   post('/api/settings', { action: 'groupAdd', name: v }).then(() => { $('newGroup').value = ''; $('groupMsg').textContent = 'Added ✓'; return loadAgents().then(loadSettings); }).catch(e => { $('groupMsg').textContent = e.message; }); };
+$('uptSave').onclick = () => post('/api/settings', { action: 'uptime', on: $('uptOn').checked, sites: $('uptSites').value }).then(() => { $('uptMsg').textContent = 'Saved ✓ (checking now)'; setTimeout(loadSettings, 4000); }).catch(e => { $('uptMsg').textContent = e.message; }); // v3.4
 $('gAdd').onclick = () => {
   const u = $('gUntil').value.trim(), m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(u);
   if (u && !m) { $('gMsg').textContent = 'Date like 31-12-2026'; return; }

@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v3.3 rev A';
+const VERSION = 'v3.4 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -187,7 +187,8 @@ function runClaude(agent, message, opts, onEvent) {
   // v1.3 connectors per bot: switched-off connectors are not loaded for this bot
   const off = opts.guest ? [...new Set([...(getSettings().knownConnectors || []), 'mcp__playwright', 'mcp__toshicrm'])] : connectorsOff(agent); // v2.8: guest runs get no connectors
   if (off.length) args.push('--disallowedTools', ...off);
-  const allow = opts.guest ? [] : [...new Set([...(chat.allow || []), ...(getSettings().allowAll || []), ...(opts.allowOnce || [])])]; // guests: nothing pre-approved // allowAll = approved once for all bots
+  const gObj = opts.guest ? (getSettings().guests || []).find(g => g.name === opts.guest) : null, gApprove = !!(gObj && gObj.canApprove && (gObj.bots || []).includes(agent)); // v3.4
+  const allow = opts.guest ? (gApprove ? [...new Set([...(chat.allow || []), ...(getSettings().allowAll || [])])].filter(t => !SEND_RE.test(t) && !/^mcp__/.test(t)) : []) : [...new Set([...(chat.allow || []), ...(getSettings().allowAll || []), ...(opts.allowOnce || [])])]; // guests: nothing pre-approved // allowAll = approved once for all bots
   if (allow.length) args.push('--allowedTools', ...allow);
   const tone = opts.tone === 'fun'
     ? 'Tone for this chat: Fun, witty and cheeky (Grok style), still accurate and brief. Hinglish with "aap".'
@@ -204,7 +205,7 @@ function runClaude(agent, message, opts, onEvent) {
   const rules = readRules(agent).trim();
   const rulesTop = rules ? '📌 PINNED RULES from Kapil — they override anything else and must be followed in EVERY reply and EVERY document:\n' + rules + '\nWhen you create or change a document or file: before saying done, check it against these rules (and STYLE.md in your work folder if it exists); fix anything that does not match, then report "📌 rules checked".\n\n' : '';
   args.push('--append-system-prompt', rulesTop + tone + ' Your name in the Toshi Bot app is "' + agentName(agent) + '" (agent id: ' + agent + ').' + ' Today is ' + stamp() + ' IST.' + groupNote + memNote + ' FILES: when you create or update a file Kapil should look at (HTML mock, PDF, Excel, Word, image), write its full path starting with icloud/ in your reply (e.g. icloud/' + botDirName(agent) + '/work/name.pdf). The app shows a Kholo button that opens it on his phone or laptop.');
-  const guestNote = opts.guest ? '[Message from GUEST ' + opts.guest + ' (not Kapil). Help only with this bot\'s project work. For a guest never send email or WhatsApp, never change CRM/Zoho, never run schedules, never share other Toshi data. Anything like that: say Kapil must ask. If the guest asks to submit / upload a document to the ISA tracker or any outside portal: do NOT submit; prepare it (find the exact file in iCloud, name, revision, MDL number, fields to fill) and add one line "📤 SUBMIT-REQUEST: <short summary> | <exact instructions for the submit run, incl. full file path and what to fill>". Kapil approves it with one tap.]\n' : '';
+  const guestNote = opts.guest ? '[Message from GUEST ' + opts.guest + ' (not Kapil). Help only with this bot\'s project work. For a guest never send email or WhatsApp, never change CRM/Zoho, never run schedules, never share other Toshi data. Anything like that: say Kapil must ask. If the guest asks to submit / upload a document to the ISA tracker or any outside portal: do NOT submit; prepare it (find the exact file in iCloud, name, revision, MDL number, fields to fill) and add one line "📤 SUBMIT-REQUEST: <short summary> | <exact instructions for the submit run, incl. full file path and what to fill>". Kapil approves it with one tap.' + (gApprove ? ' KAPIL HAS DECIDED (Settings, v3.4): ' + opts.guest + '\'s Haan COUNTS AS KAPIL\'S HAAN for document changes in this bot\'s project (edit / create documents, mocks, PDFs, registers in this bot\'s folder; old files go to _superseded, never delete). This overrides any rule that says Kapil must approve a document change. Still Kapil only: submit to ISA tracker / outside portals, email / WhatsApp, CRM / Zoho, schedules, deletes, rules and memory. After you finish a change ' + opts.guest + ' approved, add one line "👥 GUEST-APPROVED: <short summary> | <full icloud/ paths of new or changed files> | <full icloud/ paths of the old versions in _superseded>".' : '') + ']\n' : '';
   const parNote = opts.parallel ? '[⚡ PARALLEL question while your main task in this chat is still running in another copy. Answer it directly and briefly. Prefer reading; do not edit, move or overwrite files the main task may be changing; if a change is needed, say so and let Kapil decide.]\n' : '';
   args.push('--', freshNote + guestNote + parNote + message + (rules ? '\n\n[📌 Reminder, follow your pinned rules:\n' + rules + ']' : ''));
 
@@ -235,7 +236,7 @@ function runClaude(agent, message, opts, onEvent) {
       if (ev.type === 'system' && ev.subtype === 'init' && Array.isArray(ev.tools)) learnConnectors(ev.tools);
       if (ev.type === 'assistant' && ev.message && Array.isArray(ev.message.content)) {
         for (const c of ev.message.content) {
-          if (c.type === 'text' && c.text.trim()) { const v = saveSubmitLines(agent, saveScheduleLines(agent, saveMemoryLines(agent, c.text)), opts.guest); if (v.trim()) { finalText.push(v); live.texts.push(v.slice(0, 1500)); if (live.texts.length > 40) live.texts.shift(); onEvent({ t: 'text', v }); } }
+          if (c.type === 'text' && c.text.trim()) { const v = saveGuestApprovedLines(agent, saveSubmitLines(agent, saveScheduleLines(agent, saveMemoryLines(agent, c.text)), opts.guest), gApprove ? opts.guest : ''); if (v.trim()) { finalText.push(v); live.texts.push(v.slice(0, 1500)); if (live.texts.length > 40) live.texts.shift(); onEvent({ t: 'text', v }); } }
           if (c.type === 'tool_use') { live.tool = toolLabel(c.name); onEvent({ t: 'tool', v: toolLabel(c.name) }); if (isSendCall(agent, c.name, c.input)) logSend(agent, c.name, c.input); }
         }
       }
@@ -417,6 +418,49 @@ function saveSubmitLines(agent, text, by) {
     return '📤 Submit request [r:' + id + ']: ' + summary + ' — waiting for Kapil\'s ✅';
   });
 }
+
+// ---------- v3.4 guest Haan: an approving guest's Haan counts for document changes; Kapil gets a note to check / undo ----------
+function saveGuestApprovedLines(agent, text, by) {
+  return String(text).replace(/^[ \t>*-]*(?:👥\s*)?GUEST-APPROVED\s*:\s*(.+)$/gmi, (m, body) => {
+    if (!by || !validAgent(agent)) return m.replace(/GUEST-APPROVED/i, 'Guest approval (not counted)');
+    const [summary, files = '', old = ''] = body.split('|').map(x => x.trim()); if (!summary) return m;
+    const c = loadChat(agent), id = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    c.approvals = (c.approvals || []).slice(-40); c.approvals.push({ id, summary: summary.slice(0, 300), files: files.slice(0, 1500), old: old.slice(0, 1500), by, at: stamp(), status: 'new' }); saveChat(agent, c);
+    try { fs.appendFileSync(path.join(ICLOUD, 'guest-approvals.jsonl'), JSON.stringify({ id, agent, by, at: stamp(), summary: summary.slice(0, 300), files: files.slice(0, 600) }) + '\n'); } catch {}
+    notify('Toshi Bot: ' + by + ' approved a change', agentName(agent) + ': ' + summary.slice(0, 110) + ' — open the app to check or undo.');
+    return '👥 ' + by + ' approved [ga:' + id + ']: ' + summary;
+  });
+}
+
+// ---------- v3.4 uptime watch: Prabhu CRM (Netlify) + Supabase every 15 min, phone alert when down / back (no Claude used) ----------
+const UPTIME_MS = Number(process.env.TOSHI_UPTIME_MS) || 15 * 60e3;
+const UPTIME_DEFAULT = [{ name: 'Prabhu CRM (Netlify)', url: 'https://toshicrm.netlify.app/' }, { name: 'Prabhu database (Supabase)', url: 'https://ylmgucvpmvzpgcvaqhgq.supabase.co/auth/v1/health' }];
+const uptimeState = {}; // url -> { ok, fails, at, code, ms, since }
+const uptimeSites = () => { const u = getSettings().uptime || {}; return Array.isArray(u.sites) ? u.sites : UPTIME_DEFAULT; };
+function probe(url) {
+  return new Promise(resolve => {
+    const t0 = Date.now(); let done = false; const fin = (ok, code) => { if (!done) { done = true; resolve({ ok, code, ms: Date.now() - t0 }); } };
+    try {
+      const mod = url.startsWith('http://') ? require('http') : https;
+      const r = mod.get(url, { timeout: 20000, headers: { 'User-Agent': 'ToshiBot-uptime' } }, res => { res.resume(); fin(res.statusCode < 500, res.statusCode); }); // 401/404 = server answered = up
+      r.on('timeout', () => { r.destroy(); fin(false, 'timeout'); }); r.on('error', e => fin(false, e.code || 'error'));
+    } catch (e) { fin(false, 'bad url'); }
+  });
+}
+async function uptimeTick() {
+  if ((getSettings().uptime || {}).on === false) return;
+  const sites = uptimeSites(); if (!sites.length) return;
+  const res = await Promise.all(sites.map(s => probe(s.url)));
+  if (res.every(r => !r.ok) && !(await probe('https://www.google.com/')).ok) return; // the Mac's own internet is down: no false alarm
+  sites.forEach((s, i) => {
+    const r = res[i], st = uptimeState[s.url] || { ok: true, fails: 0, since: stamp() };
+    st.at = stamp(); st.code = r.code; st.ms = r.ms;
+    if (r.ok) { if (!st.ok) { st.since = stamp(); notify('✅ ' + s.name + ' is back', s.name + ' is working again (' + st.at + ' IST).'); } st.ok = true; st.fails = 0; }
+    else { st.fails++; if (st.ok && st.fails >= 2) { st.ok = false; st.since = stamp(); notify('🔴 ' + s.name + ' is DOWN', s.name + ' not answering since ' + st.at + ' IST (' + r.code + '). Prabhu work may stop: please check.'); } }
+    uptimeState[s.url] = st;
+  });
+}
+setInterval(uptimeTick, UPTIME_MS); setTimeout(uptimeTick, 15000);
 
 // ---------- v3.3 📁 bot files open inside the app (artifact style) ----------
 const VIEW_EXT = /\.(html?|pdf|png|jpe?g|gif|webp|svg|xlsx|xlsm|xls|docx|doc|pptx|csv|md|txt|json)$/i;
@@ -1165,7 +1209,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/chat') {
       const id = url.searchParams.get('agent') || '';
       if (!validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
-      const c = loadChat(id); return json(res, 200, { messages: c.messages, pending: c.pending || [], allow: c.allow || [], busy: running.has(id), queue: c.queue || [], requests: c.requests || [], live: running.has(id) ? liveRuns.get(id) || null : null });
+      const c = loadChat(id); return json(res, 200, { messages: c.messages, pending: c.pending || [], allow: c.allow || [], busy: running.has(id), queue: c.queue || [], requests: c.requests || [], approvals: c.approvals || [], live: running.has(id) ? liveRuns.get(id) || null : null });
     }
     if (req.method === 'GET' && url.pathname === '/api/files') { // v3.3
       const id = url.searchParams.get('agent') || ''; if (!validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
@@ -1183,6 +1227,20 @@ const server = http.createServer(async (req, res) => {
       };
       if (url.searchParams.get('preview') && /\.(xlsx|xlsm|xls|docx|doc|pptx)$/i.test(full)) return officePreview(full, (e, pdf) => e ? json(res, 400, { error: e.message }) : send(pdf));
       return send(full);
+    }
+    if (req.method === 'POST' && url.pathname === '/api/guestapproval') { // v3.4 owner only (guests are refused by the gate)
+      const b = await readBody(req); if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });
+      const c = loadChat(b.agent), a = (c.approvals || []).find(x => x.id === b.id);
+      if (!a) return json(res, 404, { error: 'Not found' });
+      if (b.action === 'ok') { a.status = 'checked'; a.done = stamp(); saveChat(b.agent, c); return json(res, 200, { ok: true }); }
+      if (b.action !== 'undo') return json(res, 400, { error: 'Unknown action' });
+      if (a.status === 'undone') return json(res, 409, { error: 'Already undone' });
+      if (running.has(b.agent)) return json(res, 409, { error: 'The bot is busy. Try again in a minute.' });
+      a.status = 'undone'; a.done = stamp(); saveChat(b.agent, c);
+      startRun(b.agent, 'Kapil wants to UNDO this change that ' + a.by + ' approved on ' + a.at + ': ' + a.summary + '\nNew / changed files: ' + (a.files || '(not listed)') + '\nOld versions: ' + (a.old || '(look in _superseded)') +
+        '\nPut the old versions back in their original place and name; move the new files to _superseded/undone (never delete). Then reply in 2-3 lines with what is back and what was moved.',
+        { tone: 'pro', allowOnce: [] }, () => {}, { label: '↩ Kapil: undo ' + a.by + '\'s approved change' });
+      return json(res, 200, { ok: true });
     }
     if (req.method === 'POST' && url.pathname === '/api/submitreq') { // v2.9 owner only (guests are refused by the gate)
       const b = await readBody(req); if (!validAgent(b.agent)) return json(res, 404, { error: 'Unknown agent' });
@@ -1459,7 +1517,7 @@ const server = http.createServer(async (req, res) => {
       }
     }
     if (url.pathname === '/api/settings') {
-      if (req.method === 'GET') return json(res, 200, { ...getSettings(), owner: getSettings().ownerLogin || ownerLogin, detected: ownerLogin, seen: [...lastLogins.keys()].slice(-10), folders: getFolders(), shared: Object.fromEntries(listAgents().map(a => [a.id, usesSharedBrowser(a.id)])) });
+      if (req.method === 'GET') return json(res, 200, { ...getSettings(), owner: getSettings().ownerLogin || ownerLogin, detected: ownerLogin, seen: [...lastLogins.keys()].slice(-10), folders: getFolders(), uptimeView: { on: (getSettings().uptime || {}).on !== false, sites: uptimeSites().map(x => ({ ...x, st: uptimeState[x.url] || null })) }, shared: Object.fromEntries(listAgents().map(a => [a.id, usesSharedBrowser(a.id)])) });
       if (req.method === 'POST') {
         const b = await readBody(req); const s = getSettings();
         if (b.action === 'notify') {
@@ -1533,6 +1591,11 @@ const server = http.createServer(async (req, res) => {
           writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true });
         }
         if (b.action === 'guestRemove') { s.guests = (s.guests || []).filter(g => g.id !== b.id); writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
+        if (b.action === 'guestApprove') { const g = (s.guests || []).find(g => g.id === b.id); if (g) g.canApprove = !g.canApprove; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); } // v3.4
+        if (b.action === 'uptime') { // v3.4
+          const sites = String(b.sites || '').split('\n').map(l => l.split('|').map(x => x.trim())).filter(x => x.length >= 2 && /^https?:\/\/[^\s]+$/.test(x[1])).slice(0, 10).map(([name, url]) => ({ name: name.replace(/[<>\n\r]/g, '').slice(0, 40) || url, url }));
+          s.uptime = { on: b.on !== false, sites }; writeJSON(SETTINGS_FILE, s); setTimeout(uptimeTick, 500); return json(res, 200, { ok: true });
+        }
         if (b.action === 'guestPause') { const g = (s.guests || []).find(g => g.id === b.id); if (g) g.paused = !g.paused; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'memLimit') { // v3.1 rev C
           const id = String(b.id || ''); if (id !== 'shared' && !validAgent(id)) return json(res, 404, { error: 'Unknown agent' });
