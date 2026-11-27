@@ -9,7 +9,7 @@ const path = require('path');
 const os = require('os');
 const { spawn, execFile } = require('child_process');
 
-const VERSION = 'v3.4 rev A';
+const VERSION = 'v3.5 rev A';
 const PORT = Number(process.env.PORT || 3737);
 const HOST = process.env.HOST || '127.0.0.1'; // local only; use Tailscale later for MacBook/iPhone
 const PROJECT = path.resolve(__dirname, '..');
@@ -671,8 +671,18 @@ function tick() {
     if (!s.enabled || !validAgent(s.agent)) continue;
     if (Array.isArray(s.days) && s.days.length && !s.days.includes(n.dow)) continue;
     for (const t of s.times || []) {
-      const tm = toMin(t); if (tm < 0 || n.min < tm || n.min >= tm + 10) continue;
+      const tm = toMin(t); if (tm < 0 || n.min < tm) continue;
       s.last = s.last || {}; if (s.last[t] === n.date) continue;
+      if (n.min >= tm + 10) { // v3.5: past its 10-min window. Only a run missed while the Mac was offline counts (same day, max 6 h late)
+        const late = n.min - tm; if (late > LATE_MAX_MIN || !wasOffline(tm)) continue;
+        if (running.has(s.agent)) continue;
+        s.last[t] = n.date; changed = true;
+        const lateTxt = late >= 60 ? Math.floor(late / 60) + ' h ' + (late % 60) + ' min' : late + ' min';
+        if (s.late === false) { const c = loadChat(s.agent); c.messages.push({ who: 'bot', text: '⏭ Skipped [s:' + s.id + ']: ' + t + ' IST schedule (Mac was offline, "Late chalao" is OFF) · ' + s.task.slice(0, 160), at: stamp() }); c.unread = true; saveChat(s.agent, c); continue; }
+        startRun(s.agent, '[This scheduled task is running ' + lateTxt + ' LATE because the Mac mini was offline at ' + t + ' IST. Do it now; if the task only makes sense at the exact time (or its moment has passed), skip it and say so in one line.]\n' + s.task, { tone: 'pro', allowOnce: [] }, () => {}, { scheduled: true, time: t, label: '⏰ Late run · ' + t + ' IST (' + lateTxt + ' late, Mac was offline)' });
+        continue;
+      }
+      if (hb.netDownSince) continue; // v3.5: no internet now -> it runs late when the net is back
       if (running.has(s.agent)) continue; // busy: try again on the next tick
       s.last[t] = n.date; changed = true;
       startRun(s.agent, s.task, { tone: 'pro', allowOnce: [] }, () => {}, { scheduled: true, time: t, label: '⏰ Scheduled ' + t + ' IST' });
@@ -680,7 +690,40 @@ function tick() {
   }
   if (changed) saveSchedules(list);
 }
-setInterval(tick, 30000); setTimeout(tick, 5000);
+setInterval(tick, 30000); setTimeout(tick, 20000); // v3.5: first tick after the offline check below
+
+// ---------- v3.5 Mac offline: heartbeat to Healthchecks.io (phone alert when the Mac is gone) + offline spans for late runs ----------
+const LATE_MAX_MIN = 6 * 60;
+const HB_FILE = path.join(ICLOUD, 'heartbeat.json'); // local to this Mac (iCloud folder is fine: only times)
+const HB_EVERY = Number(process.env.TOSHI_HB_MS) || 60e3; // ping every minute (Healthchecks period 5 min)
+let hb = (() => { try { return JSON.parse(fs.readFileSync(HB_FILE, 'utf8')); } catch { return {}; } })(); // { alive, spans: [[from, to]], netDownSince, lastPing }
+hb.spans = (hb.spans || []).filter(x => Date.now() - x[1] < 24 * 3600e3);
+const saveHb = () => { try { fs.writeFileSync(HB_FILE, JSON.stringify(hb)); } catch {} };
+function istMsAt(min) { const d = nowIST().date; return Date.parse(d + 'T' + String(Math.floor(min / 60)).padStart(2, '0') + ':' + String(min % 60).padStart(2, '0') + ':00+05:30'); }
+function wasOffline(min) { const at = istMsAt(min); return hb.spans.some(([a, b]) => at >= a - 60e3 && at <= b) || (hb.netDownSince && at >= hb.netDownSince - 60e3); }
+function fmtDur(ms) { const m = Math.round(ms / 60e3); return m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ' min'; }
+function missedSummary(from, to) { // schedules whose time fell in [from, to] today
+  let run = 0, skip = 0; const n = nowIST();
+  for (const s of loadSchedules()) { if (!s.enabled || (Array.isArray(s.days) && s.days.length && !s.days.includes(n.dow))) continue;
+    for (const t of s.times || []) { const at = istMsAt(toMin(t)); if (at >= from && at <= to && Date.now() - at <= LATE_MAX_MIN * 60e3 && Date.now() - at > 10 * 60e3) s.late === false ? skip++ : run++; } }
+  return run + skip ? ' · ' + (run + skip) + ' schedule(s) missed: ' + run + ' will run now, ' + skip + ' skipped' : '';
+}
+function closeSpan(from, why, delay) {
+  const to = Date.now(); hb.spans.push([from, to]); saveHb();
+  if (to - from >= 3 * 60e3) setTimeout(() => notify('✅ Mac mini back online', 'Offline ' + fmtDur(to - from) + ' (' + why + ')' + missedSummary(from, to) + '. Open the app to see.'), delay || 0); // after a restart: wait for the network first
+}
+{ // power off / app down: gap since the last "alive" mark
+  if (hb.alive && Date.now() - hb.alive > 3 * 60e3) closeSpan(hb.alive, 'Mac or app was off', 45000);
+  hb.alive = Date.now(); saveHb();
+}
+setInterval(() => { hb.alive = Date.now(); saveHb(); }, 60e3);
+async function heartbeat() {
+  const url = getSettings().hcPing;
+  const r = await probe(url && /^https:\/\/(hc-ping\.com|hchk\.io)\/[A-Za-z0-9_\-\/]+$/.test(url) ? url : 'https://www.google.com/');
+  if (r.ok) { if (url) hb.lastPing = Date.now(); if (hb.netDownSince) { const f = hb.netDownSince; hb.netDownSince = 0; closeSpan(f, 'internet was down'); } else saveHb(); }
+  else if (!hb.netDownSince) { hb.netDownSince = Date.now() - HB_EVERY / 2; saveHb(); } // went down somewhere since the last good check
+}
+setInterval(heartbeat, HB_EVERY); setTimeout(heartbeat, 3000);
 
 // ---------- v2.3 👁 Watch mode: bot checks Gmail / WhatsApp / its follow-up list on its own, every N minutes in working hours ----------
 const WATCH_DEF = { on: false, every: 30, from: '09:00', to: '20:00', days: [1, 2, 3, 4, 5, 6], gmail: true, whatsapp: false, summary: '20:00' };
@@ -1498,6 +1541,7 @@ const server = http.createServer(async (req, res) => {
           const times = [...new Set(String(b.times || '').split(/[ ,]+/).filter(Boolean))];
           if (!times.length || times.some(t => toMin(t) < 0 || toMin(t) >= 1440)) return json(res, 400, { error: 'Times must look like 09:30, 10:10' });
           const task = String(b.task || '').trim().slice(0, 4000); if (!task) return json(res, 400, { error: 'Write the task.' });
+          if (b.late !== undefined) s.late = b.late !== false; // v3.5
           s.times = times.map(t => t.padStart(5, '0')); s.task = task; s.days = Array.isArray(b.days) ? b.days.map(Number).filter(d => d >= 0 && d <= 6) : [];
           saveSchedules(list); return json(res, 200, { ok: true });
         }
@@ -1512,12 +1556,12 @@ const server = http.createServer(async (req, res) => {
         if (!times.length || times.some(t => toMin(t) < 0 || toMin(t) >= 1440)) return json(res, 400, { error: 'Times must look like 06:00, 13:00, 19:00' });
         const task = String(b.task || '').trim().slice(0, 4000); if (!task) return json(res, 400, { error: 'Write the task.' });
         const days = Array.isArray(b.days) ? b.days.map(Number).filter(d => d >= 0 && d <= 6) : [];
-        list.push({ id: Date.now().toString(36), agent: b.agent, times: times.map(t => t.padStart(5, '0')), days, task, enabled: true, created: stamp(), last: {} });
+        list.push({ id: Date.now().toString(36), agent: b.agent, times: times.map(t => t.padStart(5, '0')), days, task, enabled: true, late: b.late !== false, created: stamp(), last: {} });
         saveSchedules(list); return json(res, 200, { ok: true });
       }
     }
     if (url.pathname === '/api/settings') {
-      if (req.method === 'GET') return json(res, 200, { ...getSettings(), owner: getSettings().ownerLogin || ownerLogin, detected: ownerLogin, seen: [...lastLogins.keys()].slice(-10), folders: getFolders(), uptimeView: { on: (getSettings().uptime || {}).on !== false, sites: uptimeSites().map(x => ({ ...x, st: uptimeState[x.url] || null })) }, shared: Object.fromEntries(listAgents().map(a => [a.id, usesSharedBrowser(a.id)])) });
+      if (req.method === 'GET') return json(res, 200, { ...getSettings(), owner: getSettings().ownerLogin || ownerLogin, detected: ownerLogin, seen: [...lastLogins.keys()].slice(-10), folders: getFolders(), hbView: { ping: !!getSettings().hcPing, lastPing: hb.lastPing || 0, netDown: !!hb.netDownSince, spans: hb.spans.slice(-5) }, uptimeView: { on: (getSettings().uptime || {}).on !== false, sites: uptimeSites().map(x => ({ ...x, st: uptimeState[x.url] || null })) }, shared: Object.fromEntries(listAgents().map(a => [a.id, usesSharedBrowser(a.id)])) });
       if (req.method === 'POST') {
         const b = await readBody(req); const s = getSettings();
         if (b.action === 'notify') {
@@ -1592,6 +1636,10 @@ const server = http.createServer(async (req, res) => {
         }
         if (b.action === 'guestRemove') { s.guests = (s.guests || []).filter(g => g.id !== b.id); writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); }
         if (b.action === 'guestApprove') { const g = (s.guests || []).find(g => g.id === b.id); if (g) g.canApprove = !g.canApprove; writeJSON(SETTINGS_FILE, s); return json(res, 200, { ok: true }); } // v3.4
+        if (b.action === 'hcPing') { // v3.5 Healthchecks.io ping URL (stays in iCloud settings, never in git)
+          const u = String(b.url || '').trim(); if (u && !/^https:\/\/(hc-ping\.com|hchk\.io)\/[A-Za-z0-9_\-\/]+$/.test(u)) return json(res, 400, { error: 'Paste the Ping URL from healthchecks.io (starts with https://hc-ping.com/)' });
+          s.hcPing = u; writeJSON(SETTINGS_FILE, s); setTimeout(heartbeat, 300); return json(res, 200, { ok: true });
+        }
         if (b.action === 'uptime') { // v3.4
           const sites = String(b.sites || '').split('\n').map(l => l.split('|').map(x => x.trim())).filter(x => x.length >= 2 && /^https?:\/\/[^\s]+$/.test(x[1])).slice(0, 10).map(([name, url]) => ({ name: name.replace(/[<>\n\r]/g, '').slice(0, 40) || url, url }));
           s.uptime = { on: b.on !== false, sites }; writeJSON(SETTINGS_FILE, s); setTimeout(uptimeTick, 500); return json(res, 200, { ok: true });

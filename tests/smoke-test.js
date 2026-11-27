@@ -16,6 +16,13 @@ fs.writeFileSync(path.join(tmp, 'icloud', 'linkedin-desk', 'work', 'mock.html'),
 fs.writeFileSync(path.join(tmp, 'icloud', 'linkedin-desk', 'work', 'report.md'), '# Report\n**ok**');
 fs.mkdirSync(path.join(tmp, 'icloud', 'shared', 'work'), { recursive: true }); fs.writeFileSync(path.join(tmp, 'icloud', 'shared', 'work', 'secret.txt'), 'owner only');
 fs.writeFileSync(path.join(tmp, 'icloud', 'schedules.json'), JSON.stringify([{ id: 's1', agent: 'linkedin-desk', task: 't', times: ['09:00'], days: [7], enabled: true }, { id: 's2', agent: 'linkedin-desk', task: 't', times: ['10:00', '09:00'], days: [7], enabled: true }]));
+// v3.5 Mac was off for 2 h: one missed schedule runs late, one with "Late chalao" OFF is skipped
+const istMin = (() => { const d = new Date(Date.now() + 5.5 * 3600e3); return d.getUTCHours() * 60 + d.getUTCMinutes(); })();
+const hhmm = m => String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+const lateTest = istMin > 75;
+if (lateTest) {
+  fs.writeFileSync(path.join(tmp, 'icloud', 'heartbeat.json'), JSON.stringify({ alive: Date.now() - 2 * 3600e3, spans: [] }));
+}
 const fixture = { ntfyTopic: 'toshi-smoke123', notify: true, autoSend: true, dailyAlertRuns: 60,
   team: { enabled: true, group: 'Toshi Bot Team', trigger: '@Toshi', members: 'Manoj, 9315950722\nBobby, 9315950739', topics: 'Order status', interval: 120, model: 'sonnet',
     refreshOn: true, refreshTimes: '08:00', refreshAgent: 'mr-c', sources: 'Zoho', lastRefresh: 'x' } };
@@ -301,6 +308,19 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     await p.waitForTimeout(400); check((await p.textContent('#memList')).includes('Shared (all bots)') && (await p.textContent('#memList')).includes('points'), 'Settings: memory list loads');
     check((await p.textContent('#usageBox')).includes('₹0'), 'Settings: usage loads');
     await p.click('#tabSched'); await p.waitForTimeout(300); check(await p.isVisible('#sSave'), 'Schedules tab opens');
+    // v3.5 Mac offline: late run + skipped, ping URL check
+    const bad = await p.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'hcPing', url: 'https://evil.example/x' }) }).then(r => r.status));
+    check(bad === 400, 'Ping URL: only hc-ping.com accepted');
+    if (lateTest) {
+      const mk = b => p.evaluate(b => fetch('/api/schedules', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b) }), b);
+      await mk({ agent: 'investor-desk', times: hhmm(istMin - 60), days: [], task: 'late check' }); await mk({ agent: 'linkedin-desk', times: hhmm(istMin - 50), days: [], task: 'office timing', late: false });
+      await p.waitForTimeout(33000);
+      const lr = await p.evaluate(() => Promise.all(['investor-desk', 'linkedin-desk'].map(a => fetch('/api/chat?agent=' + a).then(r => r.json()).then(d => d.messages.map(m => m.text).join('\n')))));
+      check(/Late run · .* late, Mac was offline/.test(lr[0]), 'Missed schedule runs late after the Mac was off');
+      check(/⏭ Skipped \[s:[a-z0-9]+\]: .*office timing/.test(lr[1]), 'Late chalao OFF: missed schedule skipped with a note');
+      const hv = await p.evaluate(() => fetch('/api/settings').then(r => r.json()).then(s => s.hbView));
+      check(hv && hv.spans.length >= 1, 'Offline time recorded');
+    } else console.log('  (late-run test skipped: just after midnight IST)');
   } catch (e) { check(false, 'Unexpected: ' + e.message); }
   check(errs.length === 0, 'No JavaScript errors' + (errs.length ? ': ' + errs.join(' | ').slice(0, 300) : ''));
   await b.close(); srv.kill(); fs.rmSync(tmp, { recursive: true, force: true }); fs.rmSync(bin, { recursive: true, force: true });

@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v3.4 rev A (23-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v3.5 rev A (27-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -515,6 +515,9 @@ label:has(> input[type=checkbox]:checked){color:var(--fg)}
       <h4 style="margin:10px 0 0">🟢 Uptime watch (Prabhu CRM)</h4>
       <div class="note">Every 15 min the Mac checks these sites (no Claude limit used). Down 2 checks in a row = phone alert; back = alert. One per line: Name | https://…</div>
       <div id="uptList"></div>
+      <div class="note" id="hbNote"></div>
+      <div class="f2"><div class="fld"><label for="hcUrl">Mac offline alert: Healthchecks.io Ping URL</label><input type="text" id="hcUrl" placeholder="https://hc-ping.com/…" autocapitalize="off"></div>
+        <div class="fld" style="align-content:end"><div class="btns"><button class="btn pri" id="hcSave" type="button">Save</button><span class="msg" id="hcMsg"></span></div></div></div>
       <label><input type="checkbox" id="uptOn"> Uptime watch ON</label>
       <textarea id="uptSites" rows="3" style="width:100%;margin-top:6px"></textarea>
       <div class="btns"><button class="btn pri" id="uptSave" type="button">Save</button><span class="msg" id="uptMsg"></span></div>
@@ -791,7 +794,8 @@ function addMsg(who, text, at, meta = {}) {
   if (reqIds.length) text = text.replace(/ \[r:[a-z0-9]+\]/g, '');
   const gaIds = who === 'bot' ? [...String(text).matchAll(/👥 .+? approved \[ga:([a-z0-9]+)\]/g)].map(m => m[1]) : []; // v3.4
   if (gaIds.length) text = text.replace(/ \[ga:[a-z0-9]+\]/g, '');
-  const schedIds = who === 'bot' ? [...String(text).matchAll(/⏰ Schedule saved \[s:([a-z0-9]+)\]/g)].map(m => m[1]) : [];
+  const schedIds = who === 'bot' ? [...String(text).matchAll(/(?:⏰ Schedule saved|⏭ Skipped) \[s:([a-z0-9]+)\]/g)].map(m => m[1]) : [];
+  const skipped = /^⏭ Skipped \[s:/.test(text); // v3.5
   if (schedIds.length) { text = text.replace(/ \[s:[a-z0-9]+\]/g, ''); }
   const d = bubble(who, schedIds.length ? text : shortText);
   if (long) { const more = el('button', 'more', '▸ Poora dekhein'); more.type = 'button'; more.onclick = () => { const open = more.textContent.startsWith('▸'); d.querySelector('.txt').innerHTML = md(open ? text : shortText); more.textContent = open ? '▾ Chhota karein' : '▸ Poora dekhein'; }; d.innerHTML = ''; const t = el('div', 'txt'); t.innerHTML = md(shortText); d.append(t, more); }
@@ -816,7 +820,7 @@ function addMsg(who, text, at, meta = {}) {
   d.querySelectorAll('pre.cb').forEach(pre => { const raw = pre.textContent; const b = el('button', 'cbcopy', '📋 Copy'); b.type = 'button'; b.onclick = () => copyText(raw, b); pre.append(b); });
   for (const id of reqIds) d.append(submitCard(id)); // v2.9
   for (const id of gaIds) d.append(gaCard(id)); // v3.4
-  for (const id of schedIds) { const c = el('div', 'scard'); c.append(el('b', null, '⏰ Schedule saved')); schedButtons(id, c, true); d.append(c); } // v2.7
+  for (const id of schedIds) { const c = el('div', 'scard'); c.append(el('b', null, skipped ? '⏭ Missed while offline · tap ▶ Run now if still needed' : '⏰ Schedule saved')); schedButtons(id, c, true); d.append(c); } // v2.7
   if (who === 'bot') { const fc = fileChips(text); if (fc) d.append(fc); } // v3.3 📄 Kholo
   if (who === 'bot' && meta.idx !== undefined) d.append(msgActions(d, text, meta));
   if (at) d.append(el('span', 'at', at)); $('msgs').append(d); scroll(); return d;
@@ -1340,10 +1344,11 @@ function schedEditor(sc, box) {
   const f = el('div', 'sedit'); const tm = el('input'); tm.value = sc.times.join(', ');
   const dd = el('div', 'dd'); DAYN.forEach((n, i) => { const l = el('label'); const c = el('input'); c.type = 'checkbox'; c.value = i; c.checked = !sc.days.length || sc.days.includes(i); l.append(c, document.createTextNode(' ' + n)); dd.append(l); });
   const tk = el('textarea'); tk.rows = 3; tk.value = sc.task;
+  const lt = el('label'); const lc = el('input'); lc.type = 'checkbox'; lc.checked = sc.late !== false; lt.append(lc, document.createTextNode(' Late chalao agar chhoot jaaye (Mac offline, up to 6 h)')); // v3.5
   const bt = el('div', 'sbtns'); const sv = el('button', null, 'Save'); sv.type = 'button'; const cn = el('button', null, 'Cancel'); cn.type = 'button'; const msg = el('span', 'note');
-  sv.onclick = () => { const days = [...dd.querySelectorAll('input:checked')].map(x => Number(x.value)); schedPost({ action: 'update', id: sc.id, times: tm.value, task: tk.value, days: days.length === 7 ? [] : days }).then(() => { msg.textContent = 'Saved ✓'; loadSched().catch(() => {}); setTimeout(() => f.remove(), 600); }).catch(e => { msg.textContent = e.message; }); };
+  sv.onclick = () => { const days = [...dd.querySelectorAll('input:checked')].map(x => Number(x.value)); schedPost({ action: 'update', id: sc.id, times: tm.value, task: tk.value, late: lc.checked, days: days.length === 7 ? [] : days }).then(() => { msg.textContent = 'Saved ✓'; loadSched().catch(() => {}); setTimeout(() => f.remove(), 600); }).catch(e => { msg.textContent = e.message; }); };
   cn.onclick = () => f.remove(); bt.append(sv, cn, msg);
-  f.append(el('span', null, 'Times (IST)'), tm, dd, el('span', null, 'Task'), tk, bt); box.append(f);
+  f.append(el('span', null, 'Times (IST)'), tm, dd, el('span', null, 'Task'), tk, lt, bt); box.append(f);
 }
 function renderBotSched(list) {
   const box = $('botSched'); if (!box) return; box.replaceChildren();
@@ -1352,7 +1357,7 @@ function renderBotSched(list) {
   if (!mine.length) box.append(el('div', 'note', 'None. Tell the bot e.g. "roz 9:30 par …" and it makes one.'));
   for (const sc of mine) {
     const r = el('div', 'bs' + (sc.enabled ? '' : ' off')); const t = el('div', 't');
-    t.append(el('b', null, sc.times.join(' ')), el('span', null, sc.enabled ? (sc.days.length ? daysText(sc.days) : 'Daily') : 'Paused'));
+    t.append(el('b', null, sc.times.join(' ')), el('span', null, (sc.enabled ? (sc.days.length ? daysText(sc.days) : 'Daily') : 'Paused') + (sc.late === false ? ' · no late run' : '')));
     r.append(t, el('small', null, sc.task)); schedButtons(sc.id, r, false); box.append(r);
   }
   const nb = el('div', 'sbtns'); const add = el('button', null, '+ New schedule'); add.type = 'button'; add.onclick = () => openAuto('sched'); nb.append(add); box.append(nb);
@@ -1512,6 +1517,11 @@ async function loadSettings() {
       ap.onclick = () => post('/api/settings', { action: 'guestApprove', id: g.id }).then(loadSettings);
       top.append(ap, pz, rm); it.append(top); gl.append(it);
     }
+  }
+  if (s.hbView) { // v3.5
+    $('hcUrl').value = s.hcPing || ''; const h = s.hbView, sp = h.spans.slice(-3).reverse();
+    $('hbNote').textContent = (h.netDown ? '🔴 Internet down now. ' : '') + (h.ping ? (h.lastPing ? '💓 Last ping ' + new Date(h.lastPing).toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) + ' IST. ' : '💓 Ping not sent yet. ') : '⚠️ Mac offline alert not set (paste Ping URL below). ') +
+      (sp.length ? 'Offline: ' + sp.map(([a, b]) => new Date(a).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) + ' (' + Math.round((b - a) / 60e3) + ' min)').join(', ') : 'No offline time in last 24 h.');
   }
   if (s.uptimeView) { // v3.4
     const ul = $('uptList'); ul.replaceChildren(); $('uptOn').checked = s.uptimeView.on;
@@ -1689,6 +1699,7 @@ function loadGroupList() {
 }
 $('groupAddBtn').onclick = () => { const v = $('newGroup').value.trim(); if (!v) { $('groupMsg').textContent = 'Write the group name.'; return; }
   post('/api/settings', { action: 'groupAdd', name: v }).then(() => { $('newGroup').value = ''; $('groupMsg').textContent = 'Added ✓'; return loadAgents().then(loadSettings); }).catch(e => { $('groupMsg').textContent = e.message; }); };
+$('hcSave').onclick = () => post('/api/settings', { action: 'hcPing', url: $('hcUrl').value.trim() }).then(() => { $('hcMsg').textContent = 'Saved ✓'; setTimeout(loadSettings, 3000); }).catch(e => { $('hcMsg').textContent = e.message; }); // v3.5
 $('uptSave').onclick = () => post('/api/settings', { action: 'uptime', on: $('uptOn').checked, sites: $('uptSites').value }).then(() => { $('uptMsg').textContent = 'Saved ✓ (checking now)'; setTimeout(loadSettings, 4000); }).catch(e => { $('uptMsg').textContent = e.message; }); // v3.4
 $('gAdd').onclick = () => {
   const u = $('gUntil').value.trim(), m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(u);
