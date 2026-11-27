@@ -308,6 +308,14 @@ const fails = []; const check = (ok, what) => { console.log((ok ? '  ✓ ' : '  
     await p.waitForTimeout(400); check((await p.textContent('#memList')).includes('Shared (all bots)') && (await p.textContent('#memList')).includes('points'), 'Settings: memory list loads');
     check((await p.textContent('#usageBox')).includes('₹0'), 'Settings: usage loads');
     await p.click('#tabSched'); await p.waitForTimeout(300); check(await p.isVisible('#sSave'), 'Schedules tab opens');
+    // v3.5 rev B: slow network: the old bot's chat must not show under the new bot (phone switching)
+    await p.evaluate(() => selectChat('linkedin-desk')); await p.waitForTimeout(900);
+    const liText = (await p.textContent('#msgs')).slice(0, 40);
+    await p.evaluate(() => selectChat('mr-c')); await p.waitForTimeout(900);
+    await p.route('**/api/chat?agent=linkedin-desk', async r => { await new Promise(z => setTimeout(z, 2000)); r.continue(); });
+    await p.evaluate(() => { selectChat('linkedin-desk'); setTimeout(() => selectChat('investor-desk'), 200); }); await p.waitForTimeout(3000);
+    await p.unroute('**/api/chat?agent=linkedin-desk');
+    check((await p.textContent('#hname')) === 'Investor Desk' && !(await p.textContent('#msgs')).includes(liText) && (await p.locator('#side .agent.on').getAttribute('data-id')) === 'investor-desk', 'Fast bot switch: late answer of the old bot is ignored');
     // v3.5 Mac offline: late run + skipped, ping URL check
     const bad = await p.evaluate(() => fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'hcPing', url: 'https://evil.example/x' }) }).then(r => r.status));
     check(bad === 400, 'Ping URL: only hc-ping.com accepted');

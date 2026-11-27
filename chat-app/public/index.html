@@ -13,7 +13,7 @@
 <meta name="theme-color" content="#16202f">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-/* Toshi Bot Chat App v3.5 rev A (27-11-2026). Same look as the approved mock. */
+/* Toshi Bot Chat App v3.5 rev B (27-11-2026). Same look as the approved mock. */
 :root{
   --bg:#eef1f6; --surface:#ffffff; --surface-2:#f4f6fa; --line:#d9deea;
   --fg:#16202f; --muted:#5d6a80; --accent:#e58a1f; --accent-ink:#ffffff;
@@ -640,12 +640,20 @@ function curInfo() {
   return agents.find(x => x.id === cur) || agents[0];
 }
 function toggleGroup(gid) { openGroups.has(gid) ? openGroups.delete(gid) : openGroups.add(gid); saveOpen(); filterAgents(); }
-function selectChat(id) { if (cur === id) return; forceBottom = true; closeFind(); $('viewer').hidden = true; cur = id; attached = []; showFiles(); try { localStorage.setItem('agent', cur); } catch {} loadAgents(); loadSched().catch(() => {}); }
+function selectChat(id) {
+  if (cur === id) return; forceBottom = true; closeFind(); $('viewer').hidden = true; cur = id; attached = []; showFiles(); try { localStorage.setItem('agent', cur); } catch {}
+  // v3.5 rev B: switch at once (phone): mark the tapped bot, show its name and "Loading…", keep the bot strip where it is; only groups rebuild the list
+  if (groups.some(g => g.id === id) || ![...document.querySelectorAll('#side .agent[data-id]')].some(b => b.dataset.id === id)) { loadAgents(); loadSched().catch(() => {}); return; }
+  document.querySelectorAll('#side .agent').forEach(b => { b.classList.toggle('on', b.dataset.id === id); const ag = b.dataset.id === id && agents.find(x => x.id === id); if (ag) { ag.unread = false; sideState(b, ag); } }); // opened = read
+  showHeader(); const m = $('msgs'); m.replaceChildren(el('div', 'tool', 'Loading…')); shown = { agent: '' };
+  loadChat().catch(() => { if (cur === id) m.replaceChildren(el('div', 'tool', '⚠️ Could not load. Pull down or tap the bot again.')); });
+  loadSched().catch(() => {});
+}
 async function loadAgents() {
   const [al, gl] = await Promise.all([fetch('/api/agents').then(r => r.json()), fetch('/api/groups').then(r => r.json()).catch(() => [])]);
   agents = al; groups = gl;
   if (!agents.some(a => a.id === cur) && !groups.some(g => g.id === cur)) cur = agents.some(a => a.id === 'mr-c') ? 'mr-c' : (agents[0] || { id: 'mr-c' }).id;
-  const side = $('side'); side.replaceChildren(el('h4', null, 'My agents · ' + agents.length), agentSearch());
+  const side = $('side'); const keepX = side.scrollLeft, keepY = side.scrollTop; side.replaceChildren(el('h4', null, 'My agents · ' + agents.length), agentSearch());
   const inGroup = a => !a.pinned && a.group && groups.some(g => g.id === a.group);
   const order = [...agents.filter(a => !inGroup(a))];
   for (const g of groups) order.push({ grpHead: g }, ...agents.filter(a => inGroup(a) && a.group === g.id));
@@ -673,7 +681,7 @@ async function loadAgents() {
   add.append(av, el('b', null, 'New agent')); add.onclick = openAdd; side.append(add);
   const au = el('button', 'agent'); au.id = 'sideSet'; const av2 = el('span', 'av', '⚙️'); av2.style.cssText = 'background:transparent;border:1px dashed var(--line)';
   au.append(av2, el('b', null, 'Settings')); au.onclick = () => openAuto('set'); side.append(au);
-  filterAgents(); showHeader(); loadChat();
+  filterAgents(); side.scrollLeft = keepX; side.scrollTop = keepY; showHeader(); loadChat();
 }
 // ---------- v2.2 sidebar state: 🤖 badge, "📨 From X" preview, time + blue dot ----------
 function sideState(b, a) {
@@ -754,7 +762,9 @@ function showHeader() {
 const liveSig = d => d.live ? (d.live.texts || []).length + '|' + (d.live.tool || '') : '';
 const qSig = d => (d.queue || []).map(x => x.id + x.text.length).join(',');
 async function loadChat(pre) {
-  const d = pre || await (await fetch('/api/chat?agent=' + encodeURIComponent(cur))).json();
+  const want = cur; // v3.5 rev B: an older, slower answer must never paint over the bot you switched to
+  const d = pre || await (await fetch('/api/chat?agent=' + encodeURIComponent(want))).json();
+  if (want !== cur) return;
   serverBusy = !!d.busy && !busyAgents.has(cur);
   reqCache = Object.fromEntries((d.requests || []).map(r => [r.id, r]));
   gaCache = Object.fromEntries((d.approvals || []).map(r => [r.id, r])); // v3.4
